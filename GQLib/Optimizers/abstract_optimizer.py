@@ -96,7 +96,7 @@ class Optimizer(ABC):
 
         """
         try:
-            with open(f"params/params_{optimizer_name.lower()}.json", "r") as f:
+            with open(f"params/optimizer/{optimizer_name.lower()}.json", "r") as f:
                 params = json.load(f)
         except FileNotFoundError:
             raise FileNotFoundError(f"Configuration file for {optimizer_name} not found.")

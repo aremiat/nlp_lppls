@@ -15,6 +15,7 @@ from GQLib.Models import LPPL, LPPLS
 from .enums import InputType
 
 import logging
+from GQLib.logging import with_spinner
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class Framework:
         self.global_dates = self.data[:, 1]
         self.global_prices = self.data[:, 2].astype(float)
 
+    @with_spinner("Loading data in progress ...")
     def load_data(self) -> np.ndarray:
         """
         Load financial time series data from a CSV file.
@@ -115,7 +117,7 @@ class Framework:
         data = np.insert(data.to_numpy(), 0, t, axis=1)
         return data
 
-
+    @with_spinner("Optimization with {optimizer.__class__.__name__} in progress ...")
     def process(self, time_start: str, time_end: str, optimizer: Optimizer) -> dict:
         """
         Optimize LPPL parameters over multiple subintervals of the selected sample.
@@ -157,6 +159,7 @@ class Framework:
             })
         return results
 
+    @with_spinner("Lomb-Scargle analysis in progress ...")
     def analyze(self,
                 results : dict = None,
                 result_json_name: str = None,
@@ -326,6 +329,17 @@ class Framework:
             nb_tc (int): Maximum number of turning points to display.
             real_tc (str): Actual value of the turning point.
         """
+
+        logging.debug("\n Visualize function input :")
+        logging.debug(f"best_results : {best_results}")
+        logging.debug(f"name : {name}")
+        logging.debug(f"data_name : {data_name}")
+        logging.debug(f"start_date : {start_date}")
+        logging.debug(f"end_date : {end_date}")
+        logging.debug(f"nb_tc : {nb_tc}")
+        logging.debug(f"real_tc : {real_tc}\n")
+        
+
         significant_tc = []
         min_time = np.inf
         max_time = -np.inf
@@ -439,6 +453,7 @@ class Framework:
                           paper_bgcolor='white')
         fig.show()
 
+    @with_spinner("Creation of visualization in progress ...")
     def visualize_compare_results(self, multiple_results: dict[str, dict], 
                                   name: str = "", 
                                   data_name: str = "",
@@ -461,6 +476,17 @@ class Framework:
             nb_tc (int, optional): Number of tc necessary to calcul the exact tc. Defaults to 20.
             save_plot (bool, optional): Whether to save the plot. Defaults to False.
         """
+
+        logging.debug("\n Visualize function input :")
+        logging.debug(f"multiple_results : {multiple_results}")
+        logging.debug(f"name : {name}")
+        logging.debug(f"data_name : {data_name}")
+        logging.debug(f"real_tc : {real_tc}")
+        logging.debug(f"optimiseurs_models : {optimiseurs_models}")
+        logging.debug(f"start_date : {start_date}")
+        logging.debug(f"end_date : {end_date}")
+        logging.debug(f"nb_tc : {nb_tc}")
+        logging.debug(f"save_plot : {save_plot}\n")
         colors = [
             "#ffa15a",  # Orange clair
             "#ab63fa",  # Violet clair
@@ -472,56 +498,73 @@ class Framework:
             "#b6e880",  # Vert lime
             "#ff97ff",  # Magenta clair
         ]
+        logging.debug("Starting visualize_compare_results with start_date=%s and end_date=%s", start_date, end_date)
         start = start_date
         end = end_date
 
-        name_plot =""
+        name_plot = ""
         if start_date is not None and end_date is not None:
-            start_date = pd.to_datetime(start_date, format="%d/%m/%Y")
-            end_date = pd.to_datetime(end_date, format="%d/%m/%Y") + timedelta(days=1 * 365)
+            try:
+                start_date = pd.to_datetime(start_date, format="%d/%m/%Y")
+                end_date = pd.to_datetime(end_date, format="%d/%m/%Y") + timedelta(days=365)
+                logging.debug("Parsed start_date: %s, end_date: %s", start_date, end_date)
+            except Exception as e:
+                logging.error("Error parsing start_date or end_date: %s", e)
+                raise
         else:
             start_date = np.min(self.global_dates)
             end_date = np.max(self.global_dates)
+            logging.warning("start_date or end_date is None. Using global date range: %s to %s", start_date, end_date)
         # Filtration
         filtered_indices = [i for i, date in enumerate(self.global_dates) if start_date <= date <= end_date]
         if not filtered_indices:
-            logging.info(f"Aucune donnée disponible entre {start_date} et {end_date}.")
+            logging.info("Aucune donnée disponible entre %s et %s.", start_date, end_date)
             return
 
         filtered_dates = [self.global_dates[i] for i in filtered_indices]
         filtered_prices = [self.global_prices[i] for i in filtered_indices]
+        logging.debug("Filtered %d data points for visualization", len(filtered_dates))
 
         fig = go.Figure()
         # Plot de la série de prix
-        fig.add_trace(go.Scatter(x=filtered_dates, y=filtered_prices, mode='lines', name=data_name, line = dict(color="black", width=1)))
+        fig.add_trace(go.Scatter(x=filtered_dates, y=filtered_prices, mode='lines', name=data_name, line=dict(color="black", width=1)))
+        logging.debug("Base price series plotted")
 
         # Si la vraie date du tc est fournie, on la plot
         if real_tc is not None:
-            target_date = pd.to_datetime(real_tc, format="%d/%m/%Y")
-    
-            fig.add_trace(
-                go.Scatter(
+            try:
+                target_date = pd.to_datetime(real_tc, format="%d/%m/%Y")
+                logging.debug("Parsed real critical time: %s", target_date)
+            except Exception as e:
+                logging.error("Error parsing real_tc: %s", e)
+            target_date = None
+            if target_date:
+                fig.add_trace(
+                    go.Scatter(
                     x=[target_date, target_date],
                     y=[min(filtered_prices), max(filtered_prices)],
                     mode="lines",
                     line=dict(color="red", width=4),
                     name="Real critical time",
                     showlegend=True
+                    )
                 )
-            )
+            logging.debug("Real critical time plotted at %s", target_date)
 
         # Je veux garder 1/5 du max de la time series en haut et en bas
         total_height = max(filtered_prices) - min(filtered_prices)
         base_y = total_height / 6
         remaining_height = total_height - 2 * base_y
-        # On divise l'espace en restant pour que chaque model ait la même hauteur
+        # On divise l'espace restant pour que chaque modèle ait la même hauteur
         rectangle_height = remaining_height / len(multiple_results.keys())
+        logging.debug("Calculated rectangle_height: %s", rectangle_height)
 
         for i, (optimizer_name, results) in enumerate(multiple_results.items()):
+            logging.debug("Processing optimizer: %s", optimizer_name)
             # Récupération du modèle LPPL correspondant
             lppl_model_name = optimiseurs_models[i] if optimiseurs_models and i < len(optimiseurs_models) else "Unknown Model"
             legend_label = f"{optimizer_name} ({lppl_model_name})"
-            name_plot+=f"{optimizer_name}({lppl_model_name})_"
+            name_plot += f"{optimizer_name}({lppl_model_name})_"
             best_results = results
             significant_tc = []
             min_time = np.inf
@@ -534,94 +577,102 @@ class Framework:
                     max_time = res["sub_end"]
                 if res["is_significant"]:
                     significant_tc.append([res["bestParams"][0], res["power_value"]])
-            
+            logging.debug("Optimizer '%s': min_time=%s, max_time=%s, significant_tc=%s", optimizer_name, min_time, max_time, significant_tc)
             
             try:
-                if (nb_tc != None):
-                    significant_tc = sorted(significant_tc, key=lambda x: x[1], reverse=True)[:min(len(significant_tc),nb_tc)]
-                #Calcul de la date exacte du tc en pondérant nb_tc par leur power
+                if (nb_tc is not None):
+                    significant_tc = sorted(significant_tc, key=lambda x: x[1], reverse=True)[:min(len(significant_tc), nb_tc)]
+                    logging.debug("Trimmed significant_tc: %s", significant_tc)
+                # Calcul de la date exacte du tc en pondérant nb_tc par leur power
                 sum_max_power = sum(x[1] for x in significant_tc if x[1] is not None and not np.isnan(x[1]))
                 weighted_sum_tc = sum(x[0] * x[1] for x in significant_tc if x[1] is not None and not np.isnan(x[1]))
                 significant_tc = weighted_sum_tc / sum_max_power if sum_max_power != 0 else 0
-            except:
-                pass
+                logging.debug("Computed weighted significant tc: %s", significant_tc)
+            except Exception as e:
+                logging.error("Error processing significant_tc for optimizer '%s': %s", optimizer_name, e)
+                continue
 
             # On plot les start et end date une fois à la première itération
             if i == 0:
                 if start_date <= self.global_dates[int(min_time)] <= end_date:
                     fig.add_trace(go.Scatter(x=[self.global_dates[int(min_time)], self.global_dates[int(min_time)]],
-                            y=[min(filtered_prices), max(filtered_prices)], mode="lines",
-                            line=dict(color="gray", dash="dash"), name="Start Date", showlegend=True))
-
+                        y=[min(filtered_prices), max(filtered_prices)], mode="lines",
+                        line=dict(color="gray", dash="dash"), name="Start Date", showlegend=True))
+                    logging.debug("Start Date plotted")
                 if start_date <= self.global_dates[int(max_time)] <= end_date:
-                    fig.add_trace(go.Scatter( x=[self.global_dates[int(max_time)], self.global_dates[int(max_time)]],
+                    fig.add_trace(go.Scatter(x=[self.global_dates[int(max_time)], self.global_dates[int(max_time)]],
                             y=[min(filtered_prices), max(filtered_prices)], mode="lines",
                             line=dict(color="gray", dash="longdash"), name="End Date", showlegend=True))
-                    
+                    logging.debug("End Date plotted")
+                
             # Calcul des dates des tc
             if significant_tc and isinstance(significant_tc, float):
-                logging.info(f"Model : {optimizer_name}")
+                logging.info("Model '%s'", optimizer_name)
                 if len(self.global_dates) > significant_tc > 0:
-                    logging.info(f"Significant TC : {self.global_dates[int(round(significant_tc))]}")
+                    logging.info("Significant TC : %s", self.global_dates[int(round(significant_tc))])
                     min_tc_date = self.global_dates[int(round(significant_tc))] - timedelta(days=15)
                     max_tc_date = self.global_dates[int(round(significant_tc))] + timedelta(days=15)
-                elif significant_tc>len(self.global_dates):
+                elif significant_tc > len(self.global_dates):
                     extra_dates_needed = int(significant_tc) - len(self.global_dates) + 1
                     last_date = self.global_dates.max()
                     freq = "B" if self.frequency == "daily" else "W"
                     new_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=extra_dates_needed, freq=freq)
-                   
                     min_tc_date = new_dates[extra_dates_needed - 1] - timedelta(days=15)
                     max_tc_date = new_dates[extra_dates_needed - 1] + timedelta(days=15)
-
+                    logging.debug("New dates created for tc beyond range")
                 else:
-                    logging.info("No significant TC found, or out of range")
+                    logging.info("No significant TC found, or out of range for optimizer '%s'", optimizer_name)
                     continue
 
                 # Rectangle pour le modèle
                 fig.add_trace(go.Scatter(
-                        x=[min_tc_date, max_tc_date, max_tc_date, min_tc_date, min_tc_date],
-                        y=[min(filtered_prices) + base_y + i * (rectangle_height) , 
-                           min(filtered_prices) + base_y + i * (rectangle_height),
-                           min(filtered_prices) + base_y + i * (rectangle_height) + rectangle_height,
-                           min(filtered_prices) + base_y + i * (rectangle_height) + rectangle_height, 
-                           min(filtered_prices) + base_y + i * (rectangle_height)],
-                        fill="toself", fillcolor=colors[i % len(colors)], opacity=0.5, showlegend=True,
-                        mode="lines+markers", marker=dict(size=1), 
-                        line=dict(color="gray", width=1), name=legend_label))
+                    x=[min_tc_date, max_tc_date, max_tc_date, min_tc_date, min_tc_date],
+                    y=[min(filtered_prices) + base_y + i * rectangle_height, 
+                    min(filtered_prices) + base_y + i * rectangle_height,
+                    min(filtered_prices) + base_y + i * rectangle_height + rectangle_height,
+                    min(filtered_prices) + base_y + i * rectangle_height + rectangle_height, 
+                    min(filtered_prices) + base_y + i * rectangle_height],
+                    fill="toself", fillcolor=colors[i % len(colors)], opacity=0.5, showlegend=True,
+                    mode="lines+markers", marker=dict(size=1), 
+                    line=dict(color="gray", width=1), name=legend_label))
+                logging.debug("Rectangle plotted for optimizer '%s'", optimizer_name)
 
                 # Ajout du nom du modèle au centre du rectangle
                 center_x = min_tc_date + (max_tc_date - min_tc_date) / 2
-                center_y = min(filtered_prices) + base_y + i * (rectangle_height) + rectangle_height / 2
-                fig.add_trace(go.Scatter(x=[center_x],y=[center_y],text=[optimizer_name],mode="text",showlegend=False))
+                center_y = min(filtered_prices) + base_y + i * rectangle_height + rectangle_height / 2
+                fig.add_trace(go.Scatter(x=[center_x], y=[center_y], text=[optimizer_name], mode="text", showlegend=False))
+                logging.debug("Label added at center for optimizer '%s'", optimizer_name)
 
-        fig.update_layout(title=name, 
-                          xaxis=dict(
-                            title='Date',               # Titre de l'axe X
-                            showline=True,              # Afficher la ligne de l'axe X
-                            linecolor='black',          # Couleur de la ligne de l'axe X
-                            linewidth=1,                # Épaisseur de la ligne
-                            mirror=True                 # Ajouter la ligne de l'axe sur le côté opposé
+                fig.update_layout(title=name, 
+                        xaxis=dict(
+                            title='Date',               
+                            showline=True,            
+                            linecolor='black',         
+                            linewidth=1,                
+                            mirror=True                 
                         ),
                         yaxis=dict(
-                            title=f"{self.input_type.value} {self.frequency} price",              # Titre de l'axe Y
-                            showline=True,              # Afficher la ligne de l'axe Y
-                            linecolor='black',          # Couleur de la ligne de l'axe Y
-                            linewidth=1,                # Épaisseur de la ligne
-                            mirror=True                 # Ajouter la ligne de l'axe sur le côté opposé
+                            title=f"{self.input_type.value} {self.frequency} price",              
+                            showline=True,            
+                            linecolor='black',          
+                            linewidth=1,                
+                            mirror=True                 
                         ),
-                          showlegend=True, 
-                          plot_bgcolor='white', 
-                          paper_bgcolor='white')
+                        showlegend=True, 
+                        plot_bgcolor='white', 
+                        paper_bgcolor='white')
         pio.renderers.default = 'browser'
         fig.show()
         logging.info("Figure displayed")
-        if(save_plot):
-            # Sauvegarde du plot
-            start_date_obj = datetime.strptime(start, "%d/%m/%Y")
-            end_date_obj = datetime.strptime(end, "%d/%m/%Y")
-            filename = f"results_{self.input_type.value}/algo_comparison//{self.frequency}/{name_plot}{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.png"
-            self.save_image(fig, filename)
+        if save_plot:
+            try:
+                start_date_obj = datetime.strptime(start, "%d/%m/%Y")
+                end_date_obj = datetime.strptime(end, "%d/%m/%Y")
+                filename = f"results_{self.input_type.value}/algo_comparison//{self.frequency}/{name_plot}{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.png"
+                self.save_image(fig, filename)
+                logging.info("Figure saved at %s", filename)
+            except Exception as e:
+                logging.error("Error saving figure: %s", e)
 
 
     def show_lppl(self, lppl: 'LPPL | LPPLS', ax=None, show: bool = False) -> None:
@@ -668,6 +719,7 @@ class Framework:
         if show:
             plt.show()
 
+    @with_spinner("Generating subintervals in progress ...")
     @staticmethod
     def generate_subintervals(frequency :str, sample : np.asarray) -> list:
         """

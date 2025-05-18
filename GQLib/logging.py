@@ -39,8 +39,7 @@ def configure_logger(level: str = "DEBUG"):
     logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("plotly").setLevel(logging.WARNING)
 
-
-def with_spinner(text: str, spinner: str = "simpleDotsScrolling"):
+def with_spinner(text: str, spinner: str = "monkey"):
     """
     Decorator factory that displays a console spinner with a status message while the decorated function executes.
     Parameters

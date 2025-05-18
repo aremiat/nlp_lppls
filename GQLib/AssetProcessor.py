@@ -4,8 +4,9 @@ from .Optimizers import MPGA, PSO, SGA, SA
 from .Framework import Framework
 from GQLib.Optimizers import Optimizer
 from .enums import InputType
-
+from typing import List, Dict, Tuple
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class AssetProcessor:
         Raises:
             ValueError: If the input type is not found in the configuration file.
         """
-        with open("params/config_asset_classes.json", "r") as file:
+        with open("params/config.json", "r") as file:
             config = json.load(file)
         if self.input_type.name not in config:
             raise ValueError(f"Input type {self.input_type.name} not found in configuration.")
@@ -110,7 +111,7 @@ class AssetProcessor:
                 )
                 current+=1
 
-    def compare_optimizers(self,
+    def old_compare_optimizers(self,
                                frequency : str = "daily",
                                optimizers: list[Optimizer] = [SA(), SGA(), PSO(), MPGA()],
                                significativity_tc=0.3,
@@ -195,3 +196,110 @@ class AssetProcessor:
         
         fw = Framework(frequency = frequency, input_type=self.input_type)
         fw.visualise_data(start_date, end_date)
+
+    def compare_optimizers(self, optimizers: list[Optimizer], 
+                           frequency : str = "daily",
+                           significativity_tc=0.3,
+                           nb_tc : int = 20,
+                           rerun: bool = False,
+                           save: bool = False,
+                           save_plot : bool = False) -> None:
+        """
+        Compare the performance of different optimizers on the same data set over multiple date ranges.
+
+        Args:
+            optimizers (list[Optimizer]): A list of optimizers to compare.
+            frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
+        """
+        fw = Framework(frequency = frequency, input_type=self.input_type)
+        
+        results = {}
+        for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
+            logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
+
+            optim_results = {}
+            for optimizer in optimizers:
+                    logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
+
+                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx])
+
+            results[set_name] = optim_results
+
+        with open(f"Venise_Results/{self.input_type.value}_{frequency}.json", "w") as file:
+            json.dump(results, file, indent=4)
+
+    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float) -> Dict:
+        """
+        Run the optimizer on the data, filter the resulting turning points, analyse and save the results.
+
+        Args:
+            fw (Framework): The insttanciated Framework object with the data.
+            start_date (datetime): The start date for the optimization.
+            end_date (datetime): The end date for the optimization.
+            optimizer (Optimizer): The optimizer to use for the analysis.
+            real_tc (float): The real turning point to compare with.
+
+        Returns:
+            Dict: A dictionary containing the information about the turning points distribution.
+        """
+        run_results = fw.process(start_date, end_date, optimizer)
+        filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
+
+        tc_info = self._get_tc_distrib(filtered_results, real_tc)
+        tc_info["Confidence"] = self._compute_confidence(run_results, filtered_results)
+
+        return tc_info
+    
+    @staticmethod
+    def _get_tc_distrib(self, run_results: List[Dict], real_tc: float) -> Dict:
+        """
+        Get the distribution of turning points (TC) from the optimization results.
+        Compute quantiles, mean, and standard deviation of the turning points.
+
+        Args:
+            run_results (List[Dict]): A list of dictionaries containing the optimization results.
+
+        Returns:
+            Dict: A dictionary containing the info on the turning points distribution.
+        """
+        tc_distrib = [tc for tc in run_results["bestParams"][0]]
+
+        return {
+            "distrib": sorted(tc_distrib),
+            "mean_error": self._compute_mean_error(tc_distrib, real_tc),
+            "mean": np.mean(tc_distrib),
+            "std": np.std(tc_distrib),
+            "quantiles": {
+                "25": np.quantile(tc_distrib, 0.25),
+                "50": np.quantile(tc_distrib, 0.5),
+                "75": np.quantile(tc_distrib, 0.75)
+            }
+        }
+
+    @staticmethod
+    def _compute_confidence(self, run_results: Dict, filtered_results: Dict) -> float:
+        """
+        Compute the confidence of the turning points distribution by and the chosen filtering method.
+        Confidence = (Number of significant turning points) / (Total number of turning points)
+
+        Args:
+            run_results (Dict): The results of the optimization process.
+            filtered_results (Dict): The filtered results after analysis.
+
+        Returns:
+            float: The confidence of the turning points distribution.
+        """
+        return len([f["bestParams"][0] for f in filtered_results if f["is_significant"] is True]) / len(run_results["bestParams"][0])
+    
+    @staticmethod
+    def _compute_mean_error(self, tc_distrib: List[float], real_tc: float) -> float:
+        """
+        Compute the mean error of the predicted turning points.
+
+        Args:
+            tc_distrib (List[float]): A list of turning points.
+
+        Returns:
+            float: The mean error of the turning points distribution.
+        """
+        return np.mean([abs(tc - np.mean(tc_distrib)) for tc in tc_distrib])
