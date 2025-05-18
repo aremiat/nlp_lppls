@@ -101,15 +101,12 @@ class Optimizer(ABC):
         except FileNotFoundError:
             raise FileNotFoundError(f"Configuration file for {optimizer_name} not found.")
 
-        # Charger les paramètres liés à la fréquence
-        freq_key = f"{frequency.upper()}_PARAM_BOUNDS"
-        if freq_key in params:
-            self.PARAM_BOUNDS = params[freq_key]
+        with open("params/optimizer/search_space.json", "r") as f:
+            self.PARAM_BOUNDS = json.load(f)
 
         # Créer dynamiquement des attributs pour les autres paramètres globaux
         for key, value in params.items():
-            if key != freq_key:
-                setattr(self, key, value)
+            setattr(self, key, value)
 
     def convert_param_bounds_lppls(self, end: float) -> np.ndarray:
         """

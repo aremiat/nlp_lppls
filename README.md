@@ -1,6 +1,19 @@
 # Predicting-Oil-Turning-Points
 Replication of the research paper : "**The prediction of oil price turning points with log-periodic power law and multi-population genetic algorithm**" _Fangzheng Chenga, Tijun Fana, Dandan Fanb, Shanling Li, 2018_
 
+### Création du Virtualenv avec uv
+
+1. Ouvrez votre terminal.
+2. Installez l'outil uv avec pip :
+    ```
+    pip install uv
+    ```
+3. Une fois l'installation terminée, synchronisez et créez le virtualenv avec :
+    ```
+    uv sync
+    ```
+4. Votre environnement virtuel est maintenant prêt à être utilisé.
+
 ```mermaid
 flowchart TD
     %% Data & Configuration Layer
@@ -82,3 +95,4 @@ flowchart TD
     classDef output fill:#d5f5e3,stroke:#229954,stroke-width:2px;
     classDef docs fill:#fadbd8,stroke:#c0392b,stroke-width:2px;
 ```
+
