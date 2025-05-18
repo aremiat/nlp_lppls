@@ -14,6 +14,10 @@ from GQLib.LombAnalysis import LombAnalysis
 from GQLib.Models import LPPL, LPPLS
 from .enums import InputType
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class Framework:
     """
     Framework for processing and analyzing financial time series using LPPL and Lomb-Scargle techniques.
@@ -272,7 +276,7 @@ class Framework:
             i for i, date in enumerate(self.global_dates) if start_date <= date <= end_date
         ]
         if not filtered_indices:
-            print(f"Aucune donnée disponible entre {start_date} et {end_date}.")
+            logging.info(f"Aucune donnée disponible entre {start_date} et {end_date}.")
             return
         
         filtered_dates = [self.global_dates[i] for i in filtered_indices]
@@ -326,6 +330,8 @@ class Framework:
         min_time = np.inf
         max_time = -np.inf
 
+        logging.info("Visualisation des tc")
+
         if start_date is not None:
             start_date = pd.to_datetime(start_date, format="%d/%m/%Y")
         else:
@@ -340,7 +346,7 @@ class Framework:
             i for i, date in enumerate(self.global_dates) if start_date <= date <= end_date
         ]
         if not filtered_indices:
-            print(f"Aucune donnée disponible entre {start_date} et {end_date}.")
+            logging.info(f"Aucune donnée disponible entre {start_date} et {end_date}.")
             return
         
         filtered_dates = [self.global_dates[i] for i in filtered_indices]
@@ -479,7 +485,7 @@ class Framework:
         # Filtration
         filtered_indices = [i for i, date in enumerate(self.global_dates) if start_date <= date <= end_date]
         if not filtered_indices:
-            print(f"Aucune donnée disponible entre {start_date} et {end_date}.")
+            logging.info(f"Aucune donnée disponible entre {start_date} et {end_date}.")
             return
 
         filtered_dates = [self.global_dates[i] for i in filtered_indices]
@@ -554,9 +560,9 @@ class Framework:
                     
             # Calcul des dates des tc
             if significant_tc and isinstance(significant_tc, float):
-                print(f"Model : {optimizer_name}")
+                logging.info(f"Model : {optimizer_name}")
                 if len(self.global_dates) > significant_tc > 0:
-                    print(f"Significant TC : {self.global_dates[int(round(significant_tc))]}")
+                    logging.info(f"Significant TC : {self.global_dates[int(round(significant_tc))]}")
                     min_tc_date = self.global_dates[int(round(significant_tc))] - timedelta(days=15)
                     max_tc_date = self.global_dates[int(round(significant_tc))] + timedelta(days=15)
                 elif significant_tc>len(self.global_dates):
@@ -569,7 +575,7 @@ class Framework:
                     max_tc_date = new_dates[extra_dates_needed - 1] + timedelta(days=15)
 
                 else:
-                    print("No significant TC found, or out of range")
+                    logging.info("No significant TC found, or out of range")
                     continue
 
                 # Rectangle pour le modèle
@@ -607,7 +613,9 @@ class Framework:
                           showlegend=True, 
                           plot_bgcolor='white', 
                           paper_bgcolor='white')
+        pio.renderers.default = 'browser'
         fig.show()
+        logging.info("Figure displayed")
         if(save_plot):
             # Sauvegarde du plot
             start_date_obj = datetime.strptime(start, "%d/%m/%Y")
@@ -747,7 +755,7 @@ class Framework:
         directory_path = os.path.dirname(file_name)
 
         if not os.path.exists(directory_path):
-            print(f"{directory_path} path was created !")
+            logging.info(f"{directory_path} path was created !")
             os.makedirs(directory_path)
 
 
@@ -769,7 +777,7 @@ class Framework:
         directory_path = os.path.dirname(filename)
 
         if not os.path.exists(directory_path):
-            print(f"{directory_path} path was created !")
+            logging.info(f"{directory_path} path was created !")
             os.makedirs(directory_path)
 
         pio.write_image(fig, filename, scale=5, width=1000, height=800)

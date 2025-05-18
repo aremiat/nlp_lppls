@@ -5,6 +5,9 @@ from .Framework import Framework
 from GQLib.Optimizers import Optimizer
 from .enums import InputType
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AssetProcessor:
     """
@@ -19,7 +22,7 @@ class AssetProcessor:
             input_type (InputType): The type of asset data to process (default is WTI).
         """
         self.input_type = input_type
-        print(self.input_type.value)
+        logging.info(f"Input type: {self.input_type}")
         # On load la config de notre input_type 
         config = self.load_config()
         self.dates_sets = config["sets"]
@@ -68,12 +71,12 @@ class AssetProcessor:
         
         #Initialisation du Framework
         fw = Framework(frequency = frequency, input_type=self.input_type)
-        print(f"FREQUENCY : {frequency}")
+        logging.info(f"FREQUENCY : {frequency}")
 
         # Visualisation pour chaque algorithme
         for optimizer in optimizers:
             current = 0
-            print(f"\nRunning process for {optimizer.__class__.__name__}")
+            logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
             for set_name, (start_date, end_date) in self.dates_sets.items():
 
                 graph_start_date, graph_end_date = self.dates_graphs[current]
@@ -83,7 +86,7 @@ class AssetProcessor:
                 filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/{frequency}/{optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
                 
                 if rerun : 
-                    print(f"Running process for {set_name} from {start_date} to {end_date}")
+                    logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
 
                     # Exécute le processus d'optimisation pour l'intervalle de dates donné
                     results = fw.process(start_date, end_date, optimizer)
@@ -133,11 +136,11 @@ class AssetProcessor:
         
         fw = Framework(frequency = frequency, input_type=self.input_type)
         
-        print(f"FREQUENCY : {frequency}")
+        logging.info(f"FREQUENCY : {frequency}")
         compteur = 0
 
         for set_name, (start_date, end_date) in self.dates_sets.items():
-            print(f"Running process for {set_name} from {start_date} to {end_date}")
+            logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
             best_results_list = {}
             optimiseurs_models = []
 
@@ -149,7 +152,7 @@ class AssetProcessor:
                 filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/{frequency}/{ optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
                 
                 if rerun:
-                    print(f"\nRunning process for {optimizer.__class__.__name__}")
+                    logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
                     results = fw.process(start_date, end_date, optimizer)
                     best_results_list[optimizer.__class__.__name__] = fw.analyze(results=results,
                                                                                     significativity_tc=significativity_tc,
@@ -157,7 +160,7 @@ class AssetProcessor:
                     if save:
                         fw.save_results(results, filename)
                 else:
-                    print(f"Getting result for {optimizer.__class__.__name__}\n")
+                    logging.info(f"Getting result for {optimizer.__class__.__name__}\n")
                     best_results_list[optimizer.__class__.__name__] = fw.analyze(result_json_name=filename,
                                                                                     significativity_tc=significativity_tc,
                                                                                     lppl_model=optimizer.lppl_model)
