@@ -101,7 +101,7 @@ class Optimizer(ABC):
         except FileNotFoundError:
             raise FileNotFoundError(f"Configuration file for {optimizer_name} not found.")
 
-        with open("params/optimizer/search_space.json", "r") as f:
+        with open("params/search_space.json", "r") as f:
             self.PARAM_BOUNDS = json.load(f)
 
         # Créer dynamiquement des attributs pour les autres paramètres globaux

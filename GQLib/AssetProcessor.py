@@ -15,7 +15,7 @@ class AssetProcessor:
     This class processes financial asset data, applies optimization algorithms on LPPL Models,
     and visualizes the results based on various configurations.
     """
-    def __init__(self, input_type : InputType = InputType.WTI):
+    def __init__(self, input_type : InputType = InputType.WTI, rerun : bool = False):
         """
         Initializes the AssetProcessor with a specified input type (e.g., WTI).
         
@@ -243,7 +243,7 @@ class AssetProcessor:
             Dict: A dictionary containing the information about the turning points distribution.
         """
         run_results = fw.process(start_date, end_date, optimizer)
-        filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
+        filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model, show=True)
 
         tc_info = self._get_tc_distrib(filtered_results, real_tc)
         tc_info["Confidence"] = self._compute_confidence(run_results, filtered_results)
