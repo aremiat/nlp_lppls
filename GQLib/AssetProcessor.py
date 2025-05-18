@@ -221,14 +221,14 @@ class AssetProcessor:
             for optimizer in optimizers:
                     logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
 
-                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx])
+                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx], rerun)
 
             results[set_name] = optim_results
 
         with open(f"Venise_Results/{self.input_type.value}_{frequency}.json", "w") as file:
             json.dump(results, file, indent=4)
 
-    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float) -> Dict:
+    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float, rerun: bool = False) -> Dict:
         """
         Run the optimizer on the data, filter the resulting turning points, analyse and save the results.
 
@@ -242,9 +242,15 @@ class AssetProcessor:
         Returns:
             Dict: A dictionary containing the information about the turning points distribution.
         """
-        run_results = fw.process(start_date, end_date, optimizer)
-        filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model, show=True)
-
+        if rerun:
+            run_results = fw.process(start_date, end_date, optimizer)
+            filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model, show=True)
+        else:
+            start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
+            end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
+            filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/daily/{optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
+            filtered_results = fw.analyze(result_json_name=filename, lppl_model=optimizer.lppl_model, show=True)
+            
         tc_info = self._get_tc_distrib(filtered_results, real_tc)
         tc_info["Confidence"] = self._compute_confidence(run_results, filtered_results)
 

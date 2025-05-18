@@ -689,38 +689,7 @@ class Framework:
             Whether to display the plot immediately. Default is False.
         """
         plotter = Plotter()
-        plotter.plot_lppl(lppl, self.global_dates, self.global_prices)
-        
-        # length_extended = (round(lppl.tc) + 1000) if self.frequency == "daily" else (round(lppl.tc) + 100) 
-
-        # # Calculate the maximum available length
-        # max_length = len(self.global_prices)
-
-        # # Adjust length_extended so it does not exceed the available length
-        # length_extended = min(length_extended, max_length)
-
-        # extended_t = np.arange(lppl.t[0], length_extended)
-        # extended_y = self.global_prices[int(extended_t[0]):int(extended_t[-1] + 1)]
-        # extended_dates = self.global_dates[int(extended_t[0]):int(extended_t[-1] + 1)]
-        # end_date = self.global_dates[int(lppl.t[-1])]
-
-        # lppl.t = extended_t
-        # predicted = lppl.predict(True)
-
-        # if ax is None:
-        #     fig, ax = plt.subplots(figsize=(10, 6))
-
-        # ax.plot(extended_dates, extended_y, label='Observed')
-        # ax.plot(extended_dates, predicted, label='Predicted')
-        # ax.axvline(x=end_date, color='r', linestyle='--', label='End of Subinterval')
-        # ax.set_xlabel('Date')
-        # ax.set_ylabel('Price')
-        # ax.set_title('LPPL Model Prediction')
-        # ax.legend()
-
-        # if show:
-        #     plt.show()
-
+        plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
    
     @staticmethod
     def generate_subintervals(frequency :str, sample : np.asarray) -> list:
