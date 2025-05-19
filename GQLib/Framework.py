@@ -16,8 +16,17 @@ from .enums import InputType
 
 import logging
 from GQLib.logging import with_spinner
+import matplotlib.dates as mdates
+from scipy.stats import gaussian_kde
+
 
 logger = logging.getLogger(__name__)
+
+with open("params/debug_framework.json", "r") as file:
+    debug_params = json.load(file)
+
+DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
+DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
 
 class Framework:
     """
@@ -164,11 +173,7 @@ class Framework:
                 results : dict = None,
                 result_json_name: str = None,
                 lppl_model: 'LPPL | LPPLS' = LPPL,
-                significativity_tc : float = 0.3,
-                use_package: bool = False,
-                remove_mpf: bool = True,
-                mpf_threshold: float = 1e-3,
-                show: bool = False) -> dict:
+                significativity_tc : float = 0.3) -> dict:
         """
         Analyze results using Lomb-Scargle periodogram and identify significant critical times.
 
@@ -205,7 +210,7 @@ class Framework:
         best_results = []
 
         # Visualizations if requested
-        if show:
+        if DEBUG_STATUS_GRAPH_LOMB:
             num_intervals = len(results)
             num_cols = 3
             num_rows = (num_intervals + num_cols - 1) // num_cols
@@ -218,12 +223,11 @@ class Framework:
 
             # Lomb-Scargle analysis
             lomb = LombAnalysis(lppl_model(t_sub, y_sub, res["bestParams"]))
-            lomb.compute_lomb_periodogram(use_package=use_package)
-            lomb.filter_results(remove_mpf=remove_mpf, mpf_threshold=mpf_threshold)
+            lomb.compute_lomb_periodogram()
+            lomb.filter_results()
             is_significant = lomb.check_significance(significativity_tc=significativity_tc)
 
-            if show:
-
+            if DEBUG_STATUS_GRAPH_LOMB:
                 ax_residuals = axes[idx, 0]
                 lomb.show_residuals(ax=ax_residuals)
                 ax_residuals.set_title(f'Subinterval {idx + 1} Residuals')
@@ -247,7 +251,8 @@ class Framework:
                 "power_value": max(lomb.power)
             })
 
-        if show:
+        if DEBUG_STATUS_GRAPH_LOMB:
+            pio.renderers.default = 'browser'
             plt.tight_layout()
             plt.show()
 
@@ -477,6 +482,12 @@ class Framework:
             save_plot (bool, optional): Whether to save the plot. Defaults to False.
         """
 
+        # Adapt multiple_result to old format :
+        temp = {}
+        for key, value in multiple_results.items():
+            temp[key] = value["raw_filtered_result"]
+        multiple_results = temp
+
         logging.debug("\n Visualize function input :")
         logging.debug(f"multiple_results : {multiple_results}")
         logging.debug(f"name : {name}")
@@ -487,6 +498,7 @@ class Framework:
         logging.debug(f"end_date : {end_date}")
         logging.debug(f"nb_tc : {nb_tc}")
         logging.debug(f"save_plot : {save_plot}\n")
+
         colors = [
             "#ffa15a",  # Orange clair
             "#ab63fa",  # Violet clair
@@ -688,9 +700,38 @@ class Framework:
         show : bool, optional
             Whether to display the plot immediately. Default is False.
         """
-        plotter = Plotter()
-        plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
-   
+        length_extended = (round(lppl.tc) + 1000) if self.frequency == "daily" else (round(lppl.tc) + 100) 
+
+        # Calculate the maximum available length
+        max_length = len(self.global_prices)
+
+        # Adjust length_extended so it does not exceed the available length
+        length_extended = min(length_extended, max_length)
+
+        extended_t = np.arange(lppl.t[0], length_extended)
+        extended_y = self.global_prices[int(extended_t[0]):int(extended_t[-1] + 1)]
+        extended_dates = self.global_dates[int(extended_t[0]):int(extended_t[-1] + 1)]
+        end_date = self.global_dates[int(lppl.t[-1])]
+
+        lppl.t = extended_t
+        predicted = lppl.predict(True)
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.plot(extended_dates, extended_y, label='Observed')
+        ax.plot(extended_dates, predicted, label='Predicted')
+        ax.axvline(x=end_date, color='r', linestyle='--', label='End of Subinterval')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.set_title('LPPL Model Prediction')
+        ax.legend()
+
+        if show:
+            plt.show()
+        #     plotter = Plotter()
+        #     plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
+    
     @staticmethod
     def generate_subintervals(frequency :str, sample : np.asarray) -> list:
         """
@@ -804,3 +845,216 @@ class Framework:
             os.makedirs(directory_path)
 
         pio.write_image(fig, filename, scale=5, width=1000, height=800)
+
+
+    def _base(self, start_date: str, end_date: str, real_tc: str = None):
+        # conversion des dates
+        start_training = pd.to_datetime(start_date, format="%d/%m/%Y")
+        end_training   = pd.to_datetime(end_date,      format="%d/%m/%Y")
+        window_start   = start_training - timedelta(days=90)
+        window_end     = end_training   + timedelta(days=730)
+
+        # extraction des tranches
+        mask   = [(window_start <= d <= window_end) for d in self.global_dates]
+        dates  = [d for d, m in zip(self.global_dates, mask) if m]
+        prices = [p for p, m in zip(self.global_prices, mask) if m]
+
+        # création de la figure et de l'axe
+        fig, ax = plt.subplots(figsize=(18, 8))
+        ax.plot(dates, prices, color="black", linewidth=1)
+        ax.axvline(x=start_training, color="black", linestyle="-.", linewidth=1, label="t1")
+        ax.axvline(x=end_training,   color="black", linestyle="-.", linewidth=1, label="t2")
+        ax.axvspan(start_training, end_training, facecolor="gray", alpha=0.1)
+
+        if real_tc is not None:
+            # conversion si besoin
+            if isinstance(real_tc, (str, int)):
+                real_tc = pd.to_datetime(real_tc, format="%d/%m/%Y") \
+                        if isinstance(real_tc, str) else self.global_dates[real_tc]
+            ax.axvline(x=real_tc, color="red", linewidth=2, label="Real critical time")
+            ax.legend()
+
+        ax.set_title("Evolution of price")
+        ax.set_xlabel("Date")
+        ax.set_ylabel(f"{self.input_type.value} {self.frequency} price")
+        plt.tight_layout()
+
+        return fig, ax
+    
+    def build_plot(self, start_date: str, end_date: str, real_tc: str = None, data=None):
+        """
+        Build a plot of the price evolution with critical times.
+
+        Parameters
+        ----------
+        start_date : str
+            Start date for the analysis in the format "%d/%m/%Y".
+        end_date : str
+            End date for the analysis in the format "%d/%m/%Y".
+        real_tc : str, optional
+            Real critical time to be displayed on the plot.
+        """
+        fig, ax = self._base(start_date, end_date, real_tc)
+
+        return fig, ax
+
+    def _add_kernels(self, fig, ax, dict_results):
+        """
+        Add kernels to the plot.
+
+        Parameters
+        ----------
+        fig : Figure
+            The figure object.
+        ax : Axes
+            The axes object.
+        dict_results : dict
+            Dictionary containing the results for each kernel.
+        """
+        colors = [
+            "#ffa15a",  # Orange clair
+            "#ab63fa",  # Violet clair
+            "#00cc96",  # Vert clair
+            "#ef553b",  # Rouge clair
+            "#636efa",  # Bleu clair
+            "#19d3f3",  # Cyan
+            "#ff6692",  # Rose clair
+            "#b6e880",  # Vert lime
+            "#ff97ff",  # Magenta clair
+        ]
+
+        # Crée un second axe pour tracer les densités
+        ax2 = ax.twinx()
+        ax2.set_ylabel("Densité de tc", fontsize=12)
+
+        for idx, (opt, values) in enumerate(dict_results.items()):
+            print(values)
+            # 1) récupère la distribution brute
+            distrib_all = values["tc_distrib"]
+            # 2) convertit chaque "index" flottant en date
+            rounded = [int(round(i)) for i in distrib_all]
+            kernel_dates = [self.global_dates[i] for i in rounded]
+
+            # 3) passe les dates en nombres matplotlib (float)
+            numeric_dates = mdates.date2num(kernel_dates)
+
+            # 4) estime la densité de noyau
+            kde = gaussian_kde(numeric_dates)
+            x_eval = np.linspace(numeric_dates.min(), numeric_dates.max(), 200)
+            y_eval = kde(x_eval)
+
+            # 5) trace la densité
+            ax2.plot(
+                x_eval,
+                y_eval,
+                color=colors[idx % len(colors)],
+                linewidth=1.5,
+                label=opt
+            )
+
+        # légende et alignement des limites en x
+        ax2.legend(title="Algorithmes", loc="upper right", fontsize=10)
+        ax2.set_xlim(ax.get_xlim())
+
+        # formate automatiquement les dates pour les deux axes
+        fig.autofmt_xdate()
+
+    def _add_half_violins(self, fig, ax, dict_results,
+                        width_scale: float = 0.5,
+                        spacing: float = 0.5,
+                        specific: bool = "tc_distrib"):
+        """
+        Add half-violin plots (horizontal) for each kernel distribution,
+        stacked vertically so qu’ils ne se recouvrent pas.
+
+        Parameters
+        ----------
+        fig : Figure
+            La figure matplotlib.
+        ax : Axes
+            L’axe principal (pour les demi-violons).
+        dict_results : dict
+            Dictionnaire {algorithme: {"tc_distrib": [...]}, …}.
+        width_scale : float
+            Facteur de mise à l’échelle du “gabarit” largeur des violons.
+        spacing : float
+            Espacement vertical entre chaque demi-violon.
+        """
+        # 1) Prépare la grille de dates commune
+        # -------------------------------------
+        # on convertit tous les tc_distrib en nombres matplotlib
+        all_dates = []
+        for values in dict_results.values():
+            raw = values[specific]
+            idxs = [int(round(i)) for i in raw]
+            dts = [self.global_dates[i] for i in idxs]
+            all_dates.append(mdates.date2num(dts))
+
+        # bornes de la fenêtre à densifier
+        min_date = min(d.min() for d in all_dates)
+        max_date = max(d.max() for d in all_dates)
+        # grille uniforme de 200 points entre min_date et max_date
+        date_grid = np.linspace(min_date, max_date, 200)
+
+        # 2) Trace un demi-violon par algorithme
+        # ---------------------------------------
+        colors = [
+            "#ffa15a", "#ab63fa", "#00cc96", "#ef553b",
+            "#636efa", "#19d3f3", "#ff6692", "#b6e880",
+            "#ff97ff",
+        ]
+
+        for idx, (opt, values) in enumerate(dict_results.items()):
+            # récupère et convertit
+            raw = values[specific]
+            idxs = [int(round(i)) for i in raw]
+            dts = [self.global_dates[i] for i in idxs]
+            numeric = mdates.date2num(dts)
+
+            # KDE et densité sur la grille
+            kde = gaussian_kde(numeric)
+            dens = kde(date_grid)
+
+            # normalisation & mise à l’échelle
+            dens = dens / dens.max() * width_scale
+
+            # position de base sur l’axe Y
+            y0 = idx * spacing
+
+            # demi-violon : on remplit entre y=y0 et y=y0+dens
+            ax.fill_between(date_grid,
+                            y0,
+                            y0 + dens,
+                            facecolor=colors[idx % len(colors)],
+                            alpha=0.6)
+
+            # contour
+            ax.plot(date_grid,
+                    y0 + dens,
+                    color=colors[idx % len(colors)],
+                    linewidth=1.5,
+                    label=opt)
+
+            # étiquette à droite
+            ax.text(max_date,
+                    y0,
+                    opt,
+                    va="center",
+                    ha="left",
+                    fontsize=10)
+
+        # 3) Ajustements finaux
+        # ----------------------
+        # empêche le recouvrement
+        ax.set_ylim(-spacing * 0.5,
+                    spacing * (len(dict_results) - 0.5))
+
+        # pas de ticks Y (on a déjà les labels)
+        ax.set_yticks([])
+
+        # formate l’axe X en dates
+        ax.xaxis_date()
+        fig.autofmt_xdate()
+
+        # légende (facultative, ici on utilise plutôt les labels texte)
+        # ax.legend(loc="upper right", title="Algorithmes")

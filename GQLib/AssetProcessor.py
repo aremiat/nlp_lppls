@@ -7,9 +7,18 @@ from .enums import InputType
 from typing import List, Dict, Tuple
 import logging
 import numpy as np
+from GQLib.logging import with_spinner
 
 logger = logging.getLogger(__name__)
-from GQLib.logging import with_spinner
+
+with open("params/debug_framework.json", "r") as file:
+    debug_params = json.load(file)
+
+DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
+DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
+DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE = debug_params["DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE"]
+
+
 
 class AssetProcessor:
     """
@@ -64,23 +73,57 @@ class AssetProcessor:
             optimizers (list[Optimizer]): A list of optimizers to compare.
             frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
         """
+
+        lomb_params = {}
+        lomb_params["significativity_threshold"] = significativity_tc
+        lomb_params["nb_tc"] = nb_tc
+
+
         fw = Framework(frequency = frequency, input_type=self.input_type)
         
         results = {}
         for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
+            
             logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
 
             optim_results = {}
+            model_associated = []
             for optimizer in optimizers:
+                    model_associated.append(optimizer.lppl_model.__name__)
                     logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
-
                     optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx], rerun)
 
             results[set_name] = optim_results
 
+            print(results)
+
+            if DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE:
+                real_tc = self.real_tcs[idx] if len(self.real_tcs) > idx else None
+                fw.visualize_compare_results(multiple_results=optim_results, 
+                                            name=f"Predicted critical times {frequency} {self.input_type.value} from {start_date} to {end_date}",
+                                            data_name=f"{self.input_type.value} Data", 
+                                            real_tc=real_tc, 
+                                            optimiseurs_models=model_associated,
+                                            start_date=start_date,
+                                            end_date=end_date,
+                                            nb_tc=nb_tc,
+                                            save_plot=save_plot)
+
+        class ResultEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (bool, np.bool_)):
+                    return bool(obj)
+                elif isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return super().default(obj)
+    
         with open(f"Venise_Results/{self.input_type.value}_metrics.json", "w") as file:
-            json.dump(results, file, indent=4)
-        logging.info(f"Results saved to Venise_Results/{self.input_type.value}_{frequency}.json")
+            json.dump(results, file, indent=4, cls=ResultEncoder)
+        logging.info(f"Results saved to Venise_Results/{self.input_type.value}_metrics.json")
 
     def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float, rerun: bool = False) -> Dict:
         """
@@ -100,7 +143,7 @@ class AssetProcessor:
 
         if rerun:
             run_results = fw.process(start_date, end_date, optimizer)
-            filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model, show=True)
+            filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
         else:
             start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
             end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
@@ -108,9 +151,10 @@ class AssetProcessor:
             with open(filename, "r") as f:
                 run_results = json.load(f)
             filtered_results = fw.analyze(result_json_name=filename, lppl_model=optimizer.lppl_model)
-        
-        forward_end_date = datetime.strftime(datetime.strptime(end_date, "%d/%m/%Y") + timedelta(days=300), "%d/%m/%Y")
-        fw.visualize_tc(filtered_results, "Test", "WTI", start_date, forward_end_date, real_tc=real_tc)
+
+        if DEBUG_STATUS_GRAPH_TC:
+            forward_end_date = datetime.strftime(datetime.strptime(end_date, "%d/%m/%Y") + timedelta(days=300), "%d/%m/%Y")
+            fw.visualize_tc(filtered_results, "Test", "WTI", start_date, forward_end_date, real_tc=real_tc)
 
         return self._compute_tc_metrics(run_results, filtered_results, real_tc_numeric, fw.data[-1, 0])
     
@@ -135,6 +179,8 @@ class AssetProcessor:
 
         return {
             "tc_distrib": sorted(all_tc),
+            "tc_distrib_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
+            "tc_distrib_non_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.False_]),
             "confidence": len([f for f in filtered_results if f["is_significant"] == np.True_]) / len(run_results),
             "error_distrib": sorted(tc_errors),
             "error_mean": np.mean(tc_errors),
@@ -145,7 +191,11 @@ class AssetProcessor:
                 "50": np.quantile(tc_errors, 0.5),
                 "75": np.quantile(tc_errors, 0.75),
                 "90": np.quantile(tc_errors, 0.9),
-            }
+            },
+            "raw_run_result": run_results,
+            "raw_filtered_result": filtered_results,
+            "real_tc": real_tc,
+            "end_date": end_date,
         }
 
     def _translate_tc_to_numeric(self, tc: str, fw: Framework) -> float:
