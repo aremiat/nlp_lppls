@@ -181,19 +181,27 @@ class AssetProcessor:
         all_tc = [tc["bestParams"][0] for tc in filtered_results]
         tc_errors = [(tc - real_tc) for tc in all_tc]
 
-        tc_significant = sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_])
-
         # Trier les résultats par rapport à la valeur de leur power
-        
+        temp_tc_power = [
+            [tc["bestParams"][0], tc["power_value"]]
+            for tc in sorted(filtered_results, key=lambda tc: tc["power_value"])
+            if tc["is_significant"] == np.True_
+        ]
+        temp_tc_power.sort(key=lambda x: x[1], reverse=True)
+
         if QUANTILE_STATUS:
             quantile = NB_TC / 100
-            
+            tc_significant_power = [tc for tc, power in temp_tc_power[:max(1, int(len(temp_tc_power) * quantile))]]
+        else:
+            tc_significant_power = [tc for tc, power in temp_tc_power[:NB_TC]]
+
         sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_])
         return {
             "tc_distrib": sorted(all_tc),
             "tc_distrib_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
             "tc_distrib_non_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.False_]),
-            "tc_distrib_significant_power": np.mean([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
+            "tc_distrib_significant_power": tc_significant_power,
+            "tc_power_mean": np.mean(tc_significant_power),
             "confidence": len([f for f in filtered_results if f["is_significant"] == np.True_]) / len(run_results),
             "error_distrib": sorted(tc_errors),
             "error_mean": np.mean(tc_errors),

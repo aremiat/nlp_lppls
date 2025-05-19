@@ -846,38 +846,67 @@ class Framework:
         pio.write_image(fig, filename, scale=5, width=1000, height=800)
 
 
-    def _base(self, start_date: str, end_date: str, real_tc: str = None):
+    def _base(self, start_training:str, end_date:str, real_tc: str = None):
+        """
+        Trace le prix + t1, t2, real_tc et retourne fig, ax
+        avec zorder élevés par défaut.
+        """
         # conversion des dates
-        start_training = pd.to_datetime(start_date, format="%d/%m/%Y")
+        start_training = pd.to_datetime(start_training, format="%d/%m/%Y")
         end_training   = pd.to_datetime(end_date,      format="%d/%m/%Y")
-        window_start   = start_training - timedelta(days=90)
-        window_end     = end_training   + timedelta(days=730)
 
-        # extraction des tranches
+        # fenêtre
+        window_start = start_training - timedelta(days=90)
+        window_end   = end_training   + timedelta(days=730)
+
+        # extraction
         mask   = [(window_start <= d <= window_end) for d in self.global_dates]
         dates  = [d for d, m in zip(self.global_dates, mask) if m]
         prices = [p for p, m in zip(self.global_prices, mask) if m]
 
-        # création de la figure et de l'axe
+        # création figure/axe
         fig, ax = plt.subplots(figsize=(18, 8))
-        ax.plot(dates, prices, color="black", linewidth=1)
-        ax.axvline(x=start_training, color="black", linestyle="-.", linewidth=1, label="t1")
-        ax.axvline(x=end_training,   color="black", linestyle="-.", linewidth=1, label="t2")
-        ax.axvspan(start_training, end_training, facecolor="gray", alpha=0.1)
 
+        # rendre la figure et l'axe transparents
+        fig.patch.set_alpha(0)     # fond de la figure
+        ax.patch.set_alpha(0)      # fond de l'axe
+
+        # prix
+        ax.plot(dates, prices,
+                color="black", linewidth=1.2,
+                label=f"{self.input_type.value} {self.frequency} price",
+                zorder=20)
+
+        # bornes t1/t2
+        ax.axvline(x=start_training, color="black",
+                linestyle="-.", linewidth=1, label="t1",
+                zorder=21)
+        ax.axvline(x=end_training,   color="black",
+                linestyle="-.", linewidth=1, label="t2",
+                zorder=21)
+        # fill between the all space between t1 and t2
+        ax.axvspan(start_training, end_training, facecolor="gray", alpha=0.15)
+
+        # real_tc
         if real_tc is not None:
-            # conversion si besoin
-            if isinstance(real_tc, (str, int)):
-                real_tc = pd.to_datetime(real_tc, format="%d/%m/%Y") \
-                        if isinstance(real_tc, str) else self.global_dates[real_tc]
-            ax.axvline(x=real_tc, color="red", linewidth=2, label="Real critical time")
-            ax.legend()
+            if isinstance(real_tc, str):
+                real_tc = pd.to_datetime(real_tc, format="%d/%m/%Y")
+            elif isinstance(real_tc, int):
+                real_tc = self.global_dates[real_tc]
+            ax.axvline(x=real_tc, color="red",
+                    linewidth=2, label="Real critical time",
+                    zorder=22)
 
+        # titres & légende
         ax.set_title("Evolution of price")
         ax.set_xlabel("Date")
         ax.set_ylabel(f"{self.input_type.value} {self.frequency} price")
-        plt.tight_layout()
+        leg = ax.legend(loc="upper left", title="Algorithmes / bornes")
+        leg.get_frame().set_alpha(0.9)
+        # Puis on remonte la légende
+        leg.set_zorder(25)
 
+        plt.tight_layout()
         return fig, ax
     
     def build_plot(self, start_date: str, end_date: str, real_tc: str = None, data=None):
@@ -961,55 +990,35 @@ class Framework:
     def _add_half_violins(self, fig, ax, dict_results,
                         width_scale: float = 0.5,
                         spacing: float = 0.5,
-                        specific: str = "tc_distrib"):
-        """
-        Add half-violin plots (horizontal) for each kernel distribution,
-        stacked vertically so qu’ils ne se recouvrent pas, 
-        sur un axe secondaire pour préserver le tracé des prix.
+                        specific: str = "tc_distrib",
+                        hatch_pattern="/",
+                        color: str = "white",
+                        text: bool = False):
 
-        Parameters
-        ----------
-        fig : Figure
-        ax : Axes
-            L’axe principal, déjà occupé par le prix.
-        dict_results : dict
-            {algorithme: {specific: [...]}, …}
-        width_scale : float
-            Échelle max de la largeur des violons.
-        spacing : float
-            Écart vertical entre chaque violon.
-        specific : str
-            Clé du dict_results à prendre (tc_distrib, ou autre).
-        """
-        # --- 1. création de l'axe secondaire transparent
-        ax_violin = ax.twinx()
-        ax_violin.patch.set_alpha(0)      # fond transparent
-        ax_violin.set_yticks([])          # on masque les ticks Y
-        ax_violin.set_ylabel("")          # pas de label Y
+        # 1) créer l'axe secondaire
+        ax_v = ax.twinx()
+        # 2) le placer SOUS l'axe principal
+        ax_v.set_zorder(0)        # twin axis lowest
+        ax.set_zorder(1)          # main axis above
+        # 3) rendre son fond transparent
+        ax_v.patch.set_alpha(0)
+        ax_v.set_yticks([])
+        ax_v.set_ylabel("")
 
-        # --- 2. grille de dates commune
-        # collecte et conversion de toutes les séries
-        all_numeric = []
+        # 4) préparer la grille de dates (inchangé)
+        all_num = []
         for vals in dict_results.values():
             raw = vals[specific]
             idxs = [int(round(i)) for i in raw]
             dates = [self.global_dates[i] for i in idxs]
-            all_numeric.append(mdates.date2num(dates))
+            all_num.append(mdates.date2num(dates))
 
-        mn = min(ar.min() for ar in all_numeric)
-        mx = max(ar.max() for ar in all_numeric)
+        mn, mx = min(arr.min() for arr in all_num), max(arr.max() for arr in all_num)
         date_grid = np.linspace(mn, mx, 200)
 
-        colors = [
-            "#ffa15a", "#ab63fa", "#00cc96", "#ef553b",
-            "#636efa", "#19d3f3", "#ff6692", "#b6e880",
-            "#ff97ff",
-        ]
-
-        # pour ajuster automatiquement l'axe en Y
         max_y = -np.inf
 
-        # --- 3. tracé des demi-violons
+        # 5) tracer les demi-violons en zorder bas
         for idx, (opt, vals) in enumerate(dict_results.items()):
             raw = vals[specific]
             idxs = [int(round(i)) for i in raw]
@@ -1019,59 +1028,30 @@ class Framework:
             kde = gaussian_kde(num)
             dens = kde(date_grid)
             dens = dens / dens.max() * width_scale
-
             y0 = idx * spacing
-
-            # ligne noire de base (sous le violon)
-            ax_violin.hlines(
-                y=y0,
-                xmin=mn,
-                xmax=mx,
-                colors="black",
-                linewidth=0.5,
-                zorder=2
+            hatch = hatch_pattern
+            # ligne de base
+            ax_v.hlines(y=y0, xmin=mn, xmax=mx,
+                        colors="black", linewidth=0.5)
+            # demi-violon blanc + hachures
+            poly = ax_v.fill_between(
+                date_grid, y0, y0 + dens,
+                facecolor=color, edgecolor="black",
+                linewidth=0.8, alpha=0.90,
             )
-
-            # remplissage du demi-violon
-            ax_violin.fill_between(
-                date_grid,
-                y0,
-                y0 + dens,
-                facecolor=colors[idx % len(colors)],
-                alpha=0.6,
-                zorder=1
-            )
-
-            # contour du demi-violon
-            ax_violin.plot(
-                date_grid,
-                y0 + dens,
-                color=colors[idx % len(colors)],
-                linewidth=1.5,
-                zorder=3
-            )
-
-            # nom de l'algorithme à droite
-            ax_violin.text(
-                mx + 0.5,
-                y0 + dens.max() * 0.5,
-                opt,
-                va="center",
-                ha="left",
-                fontsize=10,
-                zorder=3
-            )
+            poly.set_hatch(hatch)
+            # contour supérieur
+            ax_v.plot(date_grid, y0 + dens,
+                    color="black", linewidth=1.0)
+            
+            # label
+            if text:
+                ax_v.text(mx + (mx - mn)*0.01, y0 + dens.max()*0.5,
+                        opt.replace("_", "\n"), va="center", ha="left")
 
             max_y = max(max_y, y0 + dens.max())
 
-        # --- 4. ajustement des limites en Y pour ne rien couper
-        lower = - spacing * 0.5
-        upper = max_y + spacing * 0.5
-        ax_violin.set_ylim(lower, upper)
-
-        # formatage de l'axe X en dates
-        ax_violin.xaxis_date()
+        # 6) ajuster l'axe Y et formater X
+        ax_v.set_ylim(-spacing*0.5, max_y + spacing*0.5)
+        ax_v.xaxis_date()
         fig.autofmt_xdate()
-
-        # légende (facultative, ici on utilise plutôt les labels texte)
-        ax.legend(loc="upper left", title="Algorithmes")
