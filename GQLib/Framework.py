@@ -240,7 +240,6 @@ class Framework:
                 self.show_lppl(lomb.lppl, ax=ax_lppl)
                 ax_lppl.set_title(f'Subinterval {idx + 1} LPPL')
 
-
             # Add of the results
             best_results.append({
                 "sub_start": res["sub_start"],
@@ -962,99 +961,117 @@ class Framework:
     def _add_half_violins(self, fig, ax, dict_results,
                         width_scale: float = 0.5,
                         spacing: float = 0.5,
-                        specific: bool = "tc_distrib"):
+                        specific: str = "tc_distrib"):
         """
         Add half-violin plots (horizontal) for each kernel distribution,
-        stacked vertically so qu’ils ne se recouvrent pas.
+        stacked vertically so qu’ils ne se recouvrent pas, 
+        sur un axe secondaire pour préserver le tracé des prix.
 
         Parameters
         ----------
         fig : Figure
-            La figure matplotlib.
         ax : Axes
-            L’axe principal (pour les demi-violons).
+            L’axe principal, déjà occupé par le prix.
         dict_results : dict
-            Dictionnaire {algorithme: {"tc_distrib": [...]}, …}.
+            {algorithme: {specific: [...]}, …}
         width_scale : float
-            Facteur de mise à l’échelle du “gabarit” largeur des violons.
+            Échelle max de la largeur des violons.
         spacing : float
-            Espacement vertical entre chaque demi-violon.
+            Écart vertical entre chaque violon.
+        specific : str
+            Clé du dict_results à prendre (tc_distrib, ou autre).
         """
-        # 1) Prépare la grille de dates commune
-        # -------------------------------------
-        # on convertit tous les tc_distrib en nombres matplotlib
-        all_dates = []
-        for values in dict_results.values():
-            raw = values[specific]
+        # --- 1. création de l'axe secondaire transparent
+        ax_violin = ax.twinx()
+        ax_violin.patch.set_alpha(0)      # fond transparent
+        ax_violin.set_yticks([])          # on masque les ticks Y
+        ax_violin.set_ylabel("")          # pas de label Y
+
+        # --- 2. grille de dates commune
+        # collecte et conversion de toutes les séries
+        all_numeric = []
+        for vals in dict_results.values():
+            raw = vals[specific]
             idxs = [int(round(i)) for i in raw]
-            dts = [self.global_dates[i] for i in idxs]
-            all_dates.append(mdates.date2num(dts))
+            dates = [self.global_dates[i] for i in idxs]
+            all_numeric.append(mdates.date2num(dates))
 
-        # bornes de la fenêtre à densifier
-        min_date = min(d.min() for d in all_dates)
-        max_date = max(d.max() for d in all_dates)
-        # grille uniforme de 200 points entre min_date et max_date
-        date_grid = np.linspace(min_date, max_date, 200)
+        mn = min(ar.min() for ar in all_numeric)
+        mx = max(ar.max() for ar in all_numeric)
+        date_grid = np.linspace(mn, mx, 200)
 
-        # 2) Trace un demi-violon par algorithme
-        # ---------------------------------------
         colors = [
             "#ffa15a", "#ab63fa", "#00cc96", "#ef553b",
             "#636efa", "#19d3f3", "#ff6692", "#b6e880",
             "#ff97ff",
         ]
 
-        for idx, (opt, values) in enumerate(dict_results.items()):
-            # récupère et convertit
-            raw = values[specific]
+        # pour ajuster automatiquement l'axe en Y
+        max_y = -np.inf
+
+        # --- 3. tracé des demi-violons
+        for idx, (opt, vals) in enumerate(dict_results.items()):
+            raw = vals[specific]
             idxs = [int(round(i)) for i in raw]
-            dts = [self.global_dates[i] for i in idxs]
-            numeric = mdates.date2num(dts)
+            dates = [self.global_dates[i] for i in idxs]
+            num = mdates.date2num(dates)
 
-            # KDE et densité sur la grille
-            kde = gaussian_kde(numeric)
+            kde = gaussian_kde(num)
             dens = kde(date_grid)
-
-            # normalisation & mise à l’échelle
             dens = dens / dens.max() * width_scale
 
-            # position de base sur l’axe Y
             y0 = idx * spacing
 
-            # demi-violon : on remplit entre y=y0 et y=y0+dens
-            ax.fill_between(date_grid,
-                            y0,
-                            y0 + dens,
-                            facecolor=colors[idx % len(colors)],
-                            alpha=0.6)
+            # ligne noire de base (sous le violon)
+            ax_violin.hlines(
+                y=y0,
+                xmin=mn,
+                xmax=mx,
+                colors="black",
+                linewidth=0.5,
+                zorder=2
+            )
 
-            # contour
-            ax.plot(date_grid,
-                    y0 + dens,
-                    color=colors[idx % len(colors)],
-                    linewidth=1.5,
-                    label=opt)
+            # remplissage du demi-violon
+            ax_violin.fill_between(
+                date_grid,
+                y0,
+                y0 + dens,
+                facecolor=colors[idx % len(colors)],
+                alpha=0.6,
+                zorder=1
+            )
 
-            # étiquette à droite
-            ax.text(max_date,
-                    y0,
-                    opt,
-                    va="center",
-                    ha="left",
-                    fontsize=10)
+            # contour du demi-violon
+            ax_violin.plot(
+                date_grid,
+                y0 + dens,
+                color=colors[idx % len(colors)],
+                linewidth=1.5,
+                zorder=3
+            )
 
-        # 3) Ajustements finaux
-        # ----------------------
-        # empêche le recouvrement
-        ax.set_ylim(-spacing * 0.5,
-                    spacing * (len(dict_results) - 0.5))
+            # nom de l'algorithme à droite
+            ax_violin.text(
+                mx + 0.5,
+                y0 + dens.max() * 0.5,
+                opt,
+                va="center",
+                ha="left",
+                fontsize=10,
+                zorder=3
+            )
 
-        # pas de ticks Y (on a déjà les labels)
-        ax.set_yticks([])
+            max_y = max(max_y, y0 + dens.max())
 
-        # formate l’axe X en dates
-        ax.xaxis_date()
+        # --- 4. ajustement des limites en Y pour ne rien couper
+        lower = - spacing * 0.5
+        upper = max_y + spacing * 0.5
+        ax_violin.set_ylim(lower, upper)
+
+        # formatage de l'axe X en dates
+        ax_violin.xaxis_date()
         fig.autofmt_xdate()
 
         # légende (facultative, ici on utilise plutôt les labels texte)
-        # ax.legend(loc="upper right", title="Algorithmes")
+        ax.legend(loc="upper left", title="Algorithmes")

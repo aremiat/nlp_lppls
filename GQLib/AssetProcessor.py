@@ -18,7 +18,11 @@ DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
 DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
 DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE = debug_params["DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE"]
 
+with open("params/lomb.json", "r") as file:
+    lomb_params = json.load(file)
 
+QUANTILE_STATUS = lomb_params["QUANTILE_STATUS"]
+NB_TC = lomb_params["NB_TC"]
 
 class AssetProcessor:
     """
@@ -177,10 +181,19 @@ class AssetProcessor:
         all_tc = [tc["bestParams"][0] for tc in filtered_results]
         tc_errors = [(tc - real_tc) for tc in all_tc]
 
+        tc_significant = sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_])
+
+        # Trier les résultats par rapport à la valeur de leur power
+        
+        if QUANTILE_STATUS:
+            quantile = NB_TC / 100
+            
+        sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_])
         return {
             "tc_distrib": sorted(all_tc),
             "tc_distrib_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
             "tc_distrib_non_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.False_]),
+            "tc_distrib_significant_power": np.mean([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
             "confidence": len([f for f in filtered_results if f["is_significant"] == np.True_]) / len(run_results),
             "error_distrib": sorted(tc_errors),
             "error_mean": np.mean(tc_errors),

@@ -1,1 +1,5 @@
- 
+{
+    "SIGNIFICATIVITY_THRESHOLD": 0.3,
+    "NB_TC": 100,
+    "QUANTILE_STATUS": true
+}
