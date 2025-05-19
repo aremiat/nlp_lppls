@@ -17,6 +17,7 @@ with open("params/debug_framework.json", "r") as file:
 DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
 DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
 DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE = debug_params["DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE"]
+DEBUG_STATUS_GRAPH_LPPL_FIT = debug_params["DEBUG_STATUS_GRAPH_LPPL_FIT"]
 
 with open("params/lomb.json", "r") as file:
     lomb_params = json.load(file)

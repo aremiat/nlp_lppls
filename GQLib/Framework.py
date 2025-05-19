@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import json
+import random
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from tqdm import tqdm
@@ -13,7 +14,7 @@ from .Optimizers import MPGA, PSO, SGA, SA, Optimizer
 from GQLib.LombAnalysis import LombAnalysis
 from GQLib.Models import LPPL, LPPLS
 from .enums import InputType
-
+from typing import Optional, Union, List, Dict, Tuple
 import logging
 from GQLib.logging import with_spinner
 import matplotlib.dates as mdates
@@ -685,7 +686,6 @@ class Framework:
             except Exception as e:
                 logging.error("Error saving figure: %s", e)
 
-
     def show_lppl(self, lppl: 'LPPL | LPPLS', ax=None, show: bool = False) -> None:
         """
         Visualize the LPPL or LPPLS fit alongside observed data.
@@ -845,8 +845,7 @@ class Framework:
 
         pio.write_image(fig, filename, scale=5, width=1000, height=800)
 
-
-    def _base(self, start_training:str, end_date:str, real_tc: str = None):
+    def _base(self, start_date: str, end_date: str, real_tc: str = None, title: str = None) -> tuple:
         """
         Trace le prix + t1, t2, real_tc et retourne fig, ax
         avec zorder élevés par défaut.
@@ -897,8 +896,11 @@ class Framework:
                     linewidth=2, label="Real critical time",
                     zorder=22)
 
-        # titres & légende
-        ax.set_title("Evolution of price")
+        if title is not None:
+            ax.set_title(title)
+        else:
+            ax.set_title("Log-Price & LPPLS fits")
+            
         ax.set_xlabel("Date")
         ax.set_ylabel(f"{self.input_type.value} {self.frequency} price")
         leg = ax.legend(loc="upper left", title="Algorithmes / bornes")
@@ -907,23 +909,6 @@ class Framework:
         leg.set_zorder(25)
 
         plt.tight_layout()
-        return fig, ax
-    
-    def build_plot(self, start_date: str, end_date: str, real_tc: str = None, data=None):
-        """
-        Build a plot of the price evolution with critical times.
-
-        Parameters
-        ----------
-        start_date : str
-            Start date for the analysis in the format "%d/%m/%Y".
-        end_date : str
-            End date for the analysis in the format "%d/%m/%Y".
-        real_tc : str, optional
-            Real critical time to be displayed on the plot.
-        """
-        fig, ax = self._base(start_date, end_date, real_tc)
-
         return fig, ax
 
     def _add_kernels(self, fig, ax, dict_results):
@@ -1054,4 +1039,48 @@ class Framework:
         # 6) ajuster l'axe Y et formater X
         ax_v.set_ylim(-spacing*0.5, max_y + spacing*0.5)
         ax_v.xaxis_date()
+        fig.autofmt_xdate()
+
+        # légende (facultative, ici on utilise plutôt les labels texte)
+        ax.legend(loc="upper left", title="Algorithmes")
+
+    def _add_lppl_fit(self, fig, ax, dict_results: dict, nb_calib: int = 3, window_extension: int = 1000):
+        """
+        Ajoute les courbes de fit LPPL/LPPLS au graphique de base.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            La figure sur laquelle on travaille.
+        ax : matplotlib.axes.Axes
+            L'axe principal (celui des prix) pour y superposer les fits.
+        lppl_models : list of LPPL or LPPLS
+            Liste d'instances de modèles LPPL(S) déjà calibrés.
+        """
+        calib_set = dict_results["Set 1"]["NELDER_MEAD"]["raw_run_result"]
+        indices = random.sample(range(len(calib_set)), nb_calib)
+        calib_set_selected = [calib_set[i] for i in indices]
+
+        for i in range(nb_calib):
+            info = calib_set_selected[i]
+            mask   = [(info["sub_start"] <= t <= info["sub_end"]) for t in self.global_times]
+            prices = [p for p, m in zip(self.global_prices, mask) if m]
+            
+            lppl = LPPLS(params=info["bestParams"], 
+                         t= np.linspace(info["sub_start"], info["sub_end"], len(prices)),
+                         y=np.array(prices))
+            
+            mask   = [(info["sub_start"] <= t <= info["sub_end"] + window_extension) for t in self.global_times]
+            dates = [p for p, m in zip(self.global_dates, mask) if m]
+            lppl.t = np.array([p for p, m in zip(self.global_times, mask) if m])
+
+            ax.plot(
+                dates,
+                lppl.predict(),
+                linestyle="--",
+                linewidth=2,
+                label=f"{lppl.__name__} (tc={self.global_dates[int(lppl.tc)].strftime('%d-%m-%Y')})",
+            )
+
+        ax.legend(title="LPPL Fits", loc="upper left", fontsize=10)
         fig.autofmt_xdate()
