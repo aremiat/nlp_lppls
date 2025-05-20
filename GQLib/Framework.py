@@ -4,7 +4,6 @@ import json
 import random
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-from tqdm import tqdm
 from datetime import datetime
 import plotly.io as pio
 import plotly.graph_objects as go
@@ -19,6 +18,8 @@ import logging
 from GQLib.logging import with_spinner
 import matplotlib.dates as mdates
 from scipy.stats import gaussian_kde
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,6 @@ class Framework:
         data = np.insert(data.to_numpy(), 0, t, axis=1)
         return data
 
-    @with_spinner("Optimization with {optimizer.__class__.__name__} in progress ...")
     def process(self, time_start: str, time_end: str, optimizer: Optimizer) -> dict:
         """
         Optimize LPPL parameters over multiple subintervals of the selected sample.
@@ -157,16 +157,22 @@ class Framework:
         results = []
 
         # Optimize parameters for each subinterval
-        #for (sub_start, sub_end, sub_data) in tqdm(subintervals, desc="Processing subintervals", unit="subinterval"):
-        for sub_start, sub_end, sub_data in subintervals:
-            
-            bestObjV, bestParams = optimizer.fit(sub_start, sub_end, sub_data)
-            results.append({
-                "sub_start": sub_start,
-                "sub_end": sub_end,
-                "bestObjV": bestObjV,
-                "bestParams": bestParams.tolist()
-            })
+        with logging_redirect_tqdm():
+            for sub_start, sub_end, sub_data in tqdm(
+                subintervals,
+                desc=f"Processing subintervals for {optimizer.__class__.__name__}",
+                unit="subinterval",
+            ):
+                start = datetime.now()
+
+                bestObjV, bestParams = optimizer.fit(sub_start, sub_end, sub_data)
+                results.append({
+                    "sub_start": sub_start,
+                    "sub_end": sub_end,
+                    "bestObjV": bestObjV,
+                    "bestParams": bestParams.tolist(),
+                    "time": (datetime.now() - start).total_seconds()
+                })
         return results
 
     @with_spinner("Lomb-Scargle analysis in progress ...")
