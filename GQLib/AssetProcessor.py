@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from .Optimizers import MPGA, PSO, SGA, SA
 from .Framework import Framework
@@ -8,15 +8,30 @@ from typing import List, Dict, Tuple
 import logging
 import numpy as np
 import time
+from GQLib.logging import with_spinner
 
 logger = logging.getLogger(__name__)
+
+with open("params/debug_framework.json", "r") as file:
+    debug_params = json.load(file)
+
+DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
+DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
+DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE = debug_params["DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE"]
+DEBUG_STATUS_GRAPH_LPPL_FIT = debug_params["DEBUG_STATUS_GRAPH_LPPL_FIT"]
+
+with open("params/lomb.json", "r") as file:
+    lomb_params = json.load(file)
+
+QUANTILE_STATUS = lomb_params["QUANTILE_STATUS"]
+NB_TC = lomb_params["NB_TC"]
 
 class AssetProcessor:
     """
     This class processes financial asset data, applies optimization algorithms on LPPL Models,
     and visualizes the results based on various configurations.
     """
-    def __init__(self, input_type : InputType = InputType.WTI):
+    def __init__(self, input_type : InputType = InputType.WTI, rerun : bool = False):
         """
         Initializes the AssetProcessor with a specified input type (e.g., WTI).
         
@@ -25,7 +40,6 @@ class AssetProcessor:
         """
         self.input_type = input_type
         logging.info(f"Input type: {self.input_type}")
-        # On load la config de notre input_type 
         config = self.load_config()
         self.dates_sets = config["sets"]
         self.dates_graphs = config["graphs"]
@@ -47,156 +61,9 @@ class AssetProcessor:
             raise ValueError(f"Input type {self.input_type.name} not found in configuration.")
         return config[self.input_type.name]
 
-    def visualise_tc(self,
-                           frequency : str = "daily",
-                           optimizers : list[Optimizer] =  [SA(), SGA(), PSO(), MPGA()], 
-                           rerun : bool = False,
-                           nb_tc : int = None, 
-                           significativity_tc = 0.3,
-                           save : bool = False):
-        
-        """
-        Visualizes the turning points (TC) for a given frequency and optimization method.
-        The list of dates for each data is defined in the config file
-
-        Args:
-            frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
-            optimizers (list[Optimizer]): A list of optimizers to use for the analysis.
-            rerun (bool): Whether to rerun the optimization process (default is False).
-            nb_tc (int): The number of turning points to visualize (default is None, meaning all).
-            significativity_tc (float): The significance threshold for the turning points (default is 0.3).
-            save (bool): Whether to save the results as JSON files (default is False).
-        """
-    
-        if frequency not in ["daily", "weekly", "monthly"]:
-                raise ValueError("The frequency must be one of 'daily', 'weekly', 'monthly'.")
-        
-        #Initialisation du Framework
-        fw = Framework(frequency = frequency, input_type=self.input_type)
-        logging.info(f"FREQUENCY : {frequency}")
-
-        # Visualisation pour chaque algorithme
-        for optimizer in optimizers:
-            current = 0
-            logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
-            for set_name, (start_date, end_date) in self.dates_sets.items():
-
-                graph_start_date, graph_end_date = self.dates_graphs[current]
-                # Conversion des chaînes de dates en objets datetime pour faciliter le formatage
-                start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
-                end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
-                filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/{frequency}/{optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
-                
-                if rerun : 
-                    logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
-
-                    # Exécute le processus d'optimisation pour l'intervalle de dates donné
-                    results = fw.process(start_date, end_date, optimizer)
-                    if save:
-                        # Sauvegarde des résultats au format JSON dans le fichier généré
-                        fw.save_results(results, filename)
-                    # Verification de la significativité des résultats
-                    best_results = fw.analyze(results, significativity_tc=significativity_tc, lppl_model = optimizer.lppl_model)
-
-                else:
-                    best_results = fw.analyze(result_json_name=filename,significativity_tc=significativity_tc,lppl_model=optimizer.lppl_model)
-                
-                # Visualisation des résultats finaux
-                fw.visualize_tc(
-                    best_results,
-                    f"{self.input_type.value} {optimizer.__class__.__name__} {frequency} ({optimizer.lppl_model.__name__}) results from {start_date_obj.strftime('%m-%Y')} to {end_date_obj.strftime('%m-%Y')}",
-                    start_date=graph_start_date,
-                    end_date=graph_end_date,
-                    nb_tc = nb_tc,
-                    real_tc = self.real_tcs[current]
-                )
-                current+=1
-
-    def old_compare_optimizers(self,
-                               frequency : str = "daily",
-                               optimizers: list[Optimizer] = [SA(), SGA(), PSO(), MPGA()],
-                               significativity_tc=0.3,
-                               nb_tc : int = 20,
-                               rerun: bool = False,
-                               save: bool = False,
-                               save_plot : bool = False):
-    
-        """
-        Compares the performance of different optimizers in predicting turning points.
-
-        Args:
-            frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
-            optimizers (list[Optimizer]): A list of optimizers to compare.
-            significativity_tc (float): The significance threshold for the turning points (default is 0.3).
-            nb_tc (int): The number of turning points to visualize (default is 20).
-            rerun (bool): Whether to rerun the optimization process (default is False).
-            save (bool): Whether to save the results as JSON files (default is False).
-            save_plot (bool): Whether to save the comparison plot (default is False).
-        """
-        if frequency not in ["daily", "weekly", "monthly"]:
-                raise ValueError("The frequency must be one of 'daily', 'weekly', 'monthly'.")
-        
-        fw = Framework(frequency = frequency, input_type=self.input_type)
-        
-        logging.info(f"FREQUENCY : {frequency}")
-        compteur = 0
-
-        for set_name, (start_date, end_date) in self.dates_sets.items():
-            logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
-            best_results_list = {}
-            optimiseurs_models = []
-
-            for optimizer in optimizers:
-                optimiseurs_models.append(optimizer.lppl_model.__name__)
-                # Conversion des chaînes de dates en objets datetime pour faciliter le formatage
-                start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
-                end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
-                filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/{frequency}/{ optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
-                
-                if rerun:
-                    logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
-                    results = fw.process(start_date, end_date, optimizer)
-                    best_results_list[optimizer.__class__.__name__] = fw.analyze(results=results,
-                                                                                    significativity_tc=significativity_tc,
-                                                                                    lppl_model=optimizer.lppl_model)
-                    if save:
-                        fw.save_results(results, filename)
-                else:
-                    logging.info(f"Getting result for {optimizer.__class__.__name__}\n")
-                    best_results_list[optimizer.__class__.__name__] = fw.analyze(result_json_name=filename,
-                                                                                    significativity_tc=significativity_tc,
-                                                                                    lppl_model=optimizer.lppl_model)
-                    
-            real_tc = self.real_tcs[compteur] if len(self.real_tcs)>compteur else None
-            fw.visualize_compare_results(multiple_results=best_results_list, 
-                                        name=f"Predicted critical times {frequency} {self.input_type.value} from {start_date_obj.strftime('%m-%Y')} to {end_date_obj.strftime('%m-%Y')}",
-                                        data_name=f"{self.input_type.value} Data", 
-                                        real_tc=real_tc, 
-                                        optimiseurs_models = optimiseurs_models,
-                                        start_date=start_date,
-                                        end_date=end_date,
-                                        nb_tc = nb_tc,
-                                        save_plot = save_plot)
-            compteur += 1
-
-    def visualise_data(self,
-                       frequency : str = "daily",
-                       start_date = None,
-                        end_date = None):
-        """
-        Visualizes the raw data for a given frequency and date range.
-        
-        Args:
-            frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
-            start_date (str): The start date for the visualization (default is None).
-            end_date (str): The end date for the visualization (default is None).
-        """
-
-        if frequency not in ["daily", "weekly", "monthly"]:
-                raise ValueError("The frequency must be one of 'daily', 'weekly', 'monthly'.")
-        
-        fw = Framework(frequency = frequency, input_type=self.input_type)
-        fw.visualise_data(start_date, end_date)
+    # ---------------------------------------------
+    # |                 NEW VERSION               |
+    # ---------------------------------------------
 
     def compare_optimizers(self, optimizers: list[Optimizer], 
                            frequency : str = "daily",
@@ -212,24 +79,59 @@ class AssetProcessor:
             optimizers (list[Optimizer]): A list of optimizers to compare.
             frequency (str): The frequency of the data ('daily', 'weekly', or 'monthly').
         """
+
+        lomb_params = {}
+        lomb_params["significativity_threshold"] = significativity_tc
+        lomb_params["nb_tc"] = nb_tc
+
+
         fw = Framework(frequency = frequency, input_type=self.input_type)
         
         results = {}
         for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
+            
             logging.info(f"Running process for {set_name} from {start_date} to {end_date}")
 
             optim_results = {}
+            model_associated = []
             for optimizer in optimizers:
+                    model_associated.append(optimizer.lppl_model.__name__)
                     logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
-
-                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx])
+                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx], rerun, save)
 
             results[set_name] = optim_results
 
-        with open(f"Venise_Results/{self.input_type.value}_{frequency}.json", "w") as file:
-            json.dump(results, file, indent=4)
+            print(results)
 
-    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float) -> Dict:
+            if DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE:
+                real_tc = self.real_tcs[idx] if len(self.real_tcs) > idx else None
+                fw.visualize_compare_results(multiple_results=optim_results, 
+                                            name=f"Predicted critical times {frequency} {self.input_type.value} from {start_date} to {end_date}",
+                                            data_name=f"{self.input_type.value} Data", 
+                                            real_tc=real_tc, 
+                                            optimiseurs_models=model_associated,
+                                            start_date=start_date,
+                                            end_date=end_date,
+                                            nb_tc=nb_tc,
+                                            save_plot=save_plot)
+
+        class ResultEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (bool, np.bool_)):
+                    return bool(obj)
+                elif isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return super().default(obj)
+    
+        with open(f"Venise_Results/{self.input_type.value}_metrics.json", "w") as file:
+            json.dump(results, file, indent=4, cls=ResultEncoder)
+        logging.info(f"Results saved to Venise_Results/{self.input_type.value}_metrics.json")
+
+    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float, rerun: bool = False, save: bool = False) -> Dict:
         """
         Run the optimizer on the data, filter the resulting turning points, analyse and save the results.
 
@@ -238,161 +140,102 @@ class AssetProcessor:
             start_date (datetime): The start date for the optimization.
             end_date (datetime): The end date for the optimization.
             optimizer (Optimizer): The optimizer to use for the analysis.
-            real_tc (float): The real turning point to compare with.
+            real_tc (str): The real turning point to compare with.
 
         Returns:
             Dict: A dictionary containing the information about the turning points distribution.
         """
-        run_results = fw.process(start_date, end_date, optimizer)
-        filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
+        real_tc_numeric = self._translate_tc_to_numeric(real_tc, fw)
+        start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
+        end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
+        filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/daily/{optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
 
+        if rerun:
+            run_results = fw.process(start_date, end_date, optimizer)
+            filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
+            if save:
+                fw.save_results(run_results, filename)
+        else:
+            with open(filename, "r") as f:
+                run_results = json.load(f)
+            filtered_results = fw.analyze(result_json_name=filename, lppl_model=optimizer.lppl_model)
 
+        if DEBUG_STATUS_GRAPH_TC:
+            forward_end_date = datetime.strftime(datetime.strptime(end_date, "%d/%m/%Y") + timedelta(days=300), "%d/%m/%Y")
+            fw.visualize_tc(filtered_results, "Test", "WTI", start_date, forward_end_date, real_tc=real_tc)
 
-        return tc_info
-
-    def compute_global_error(self,
-                                       optimizers: list[Optimizer],
-                                       frequencies: list[str] = ["daily"],
-                                       significativity_tc: float = 0.3,
-                                       save: bool = False,
-                                       rerun: bool = False
-                                       ) -> dict[str, dict[str, dict[str, float]]]:
-
-        summary: dict[str, dict[str, dict[str, float]]] = {}
-
-        for freq in frequencies:
-            print(f"Running FREQUENCY : {freq}")
-            fw = Framework(frequency=freq, input_type=self.input_type)
-            summary[freq] = {}
-
-            for optimizer in optimizers:
-                print(f"Running process for Optimizer : {optimizer.__class__.__name__}")
-                all_errs = []
-                times = []
-
-                # 1) Initialisation des compteurs de confusion
-                tp_list, fp_list, fn_list, tn_list = [], [], [], []
-
-                for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
-                    sd = datetime.strptime(start_date, "%d/%m/%Y")
-                    ed = datetime.strptime(end_date, "%d/%m/%Y")
-                    filename = (
-                        f"Results/results_{self.input_type.value}/"
-                        f"{optimizer.__class__.__name__}/{freq}/"
-                        f"{optimizer.lppl_model.__name__}_"
-                        f"{sd.strftime('%m-%Y')}_{ed.strftime('%m-%Y')}.json"
-                    )
-
-                    # 2) mesurer le temps d'analyse + calcul d'erreur
-                    if rerun:
-                        t0 = time.time()
-                        results = fw.process(start_date, end_date, optimizer)
-                        best_results = fw.analyze(
-                            results=results,
-                            significativity_tc=significativity_tc,
-                            lppl_model=optimizer.lppl_model
-                        )
-                        if save:
-                            fw.save_results(results, filename)
-                    else:
-                        best_results = fw.analyze(
-                            result_json_name=filename,
-                            significativity_tc=significativity_tc,
-                            lppl_model=optimizer.lppl_model
-                        )
-
-                    errs = fw.compute_errors_in_days(
-                        best_results,
-                        real_tc=self.real_tcs[idx]
-                    )
-                    times.append(time.time() - t0)
-                    all_errs.extend(r["error_days"] for r in errs)
-
-                    # 3) calcul de la confusion pour ce set
-                    cm = fw.compute_confusion_matrix(
-                        best_results,
-                        real_tc=self.real_tcs[idx],
-                        window_days=15
-                    )
-                    tp_list.append(cm["TP"])
-                    fp_list.append(cm["FP"])
-
-                # 4) agrégation des erreurs
-                arr = np.array(all_errs, dtype=float)
-                valid = arr[~np.isnan(arr)]
-
-                # 5) construction du stats dict
-                stats = {
-                    "mean_error": float(np.mean(valid)) if valid.size else np.nan,
-                    "median_error": float(np.median(valid)) if valid.size else np.nan,
-                    "std_error": float(np.std(valid)) if valid.size else np.nan,
-                    "max_error": float(np.max(valid)) if valid.size else np.nan,
-                    "q25_error": float(np.percentile(valid, 25)) if valid.size else np.nan,
-                    "q50_error": float(np.percentile(valid, 50)) if valid.size else np.nan,
-                    "q75_error": float(np.percentile(valid, 75)) if valid.size else np.nan,
-
-                    # temps moyen de calcul
-                    "mean_time": float(np.mean(times)) if times else np.nan,
-
-                    # confusion (moyennes sur tous les sets)
-                    "TP": float(np.mean(tp_list)) if tp_list else np.nan,
-                    "FP": float(np.mean(fp_list)) if fp_list else np.nan,
-                }
-
-                summary[freq][optimizer.__class__.__name__] = stats
-
-        return summary
+        return self._compute_tc_metrics(run_results, filtered_results, real_tc_numeric, fw.data[-1, 0])
     
-    @staticmethod
-    def _get_tc_distrib(self, run_results: List[Dict], real_tc: float) -> Dict:
+    @with_spinner("Computing metrics...")
+    def _compute_tc_metrics(self, run_results: List[Dict], filtered_results: List[Dict], real_tc: float, end_date: float) -> Dict:
         """
         Get the distribution of turning points (TC) from the optimization results.
         Compute quantiles, mean, and standard deviation of the turning points.
 
         Args:
-            run_results (List[Dict]): A list of dictionaries containing the optimization results.
+            run_results (List[Dict]): Optimization results
+            filtered_results (List[Dict]): Filtered results after analysis
+            real_tc (float): The real turning point to compare with
+            end_date (float): The end date for the optimization
 
         Returns:
             Dict: A dictionary containing the info on the turning points distribution.
         """
-        tc_distrib = [tc for tc in run_results["bestParams"][0]]
+        # Rajouter le treshold dans le filtre
+        all_tc = [tc["bestParams"][0] for tc in filtered_results]
+        tc_errors = [(tc - real_tc) for tc in all_tc]
 
+        # Trier les résultats par rapport à la valeur de leur power
+        temp_tc_power = [
+            [tc["bestParams"][0], tc["power_value"]]
+            for tc in sorted(filtered_results, key=lambda tc: tc["power_value"])
+            if tc["is_significant"] == np.True_
+        ]
+        temp_tc_power.sort(key=lambda x: x[1], reverse=True)
+
+        if QUANTILE_STATUS:
+            quantile = NB_TC / 100
+            tc_significant_power = [tc for tc, power in temp_tc_power[:max(1, int(len(temp_tc_power) * quantile))]]
+        else:
+            tc_significant_power = [tc for tc, power in temp_tc_power[:NB_TC]]
+
+        sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_])
         return {
-            "distrib": sorted(tc_distrib),
-            "mean_error": self._compute_mean_error(tc_distrib, real_tc),
-            "mean": np.mean(tc_distrib),
-            "std": np.std(tc_distrib),
+            "tc_distrib": sorted(all_tc),
+            "tc_distrib_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.True_]),
+            "tc_distrib_non_significant": sorted([tc["bestParams"][0] for tc in filtered_results if tc["is_significant"] == np.False_]),
+            "tc_distrib_significant_power": tc_significant_power,
+            "tc_power_mean": np.mean(tc_significant_power),
+            "confidence": len([f for f in filtered_results if f["is_significant"] == np.True_]) / len(run_results),
+            "error_distrib": sorted(tc_errors),
+            "error_mean": np.mean(tc_errors),
+            "error_std": np.std(tc_errors),
             "quantiles": {
-                "25": np.quantile(tc_distrib, 0.25),
-                "50": np.quantile(tc_distrib, 0.5),
-                "75": np.quantile(tc_distrib, 0.75)
-            }
+                "10": np.quantile(tc_errors, 0.1),
+                "25": np.quantile(tc_errors, 0.25),
+                "50": np.quantile(tc_errors, 0.5),
+                "75": np.quantile(tc_errors, 0.75),
+                "90": np.quantile(tc_errors, 0.9),
+            },
+            "raw_run_result": run_results,
+            "raw_filtered_result": filtered_results,
+            "real_tc": real_tc,
+            "end_date": end_date,
         }
 
-    @staticmethod
-    def _compute_confidence(self, run_results: Dict, filtered_results: Dict) -> float:
+    def _translate_tc_to_numeric(self, tc: str, fw: Framework) -> float:
         """
-        Compute the confidence of the turning points distribution by and the chosen filtering method.
-        Confidence = (Number of significant turning points) / (Total number of turning points)
+        Convert the real turning point date to a numeric value based on the data range and the date bounds of the selected interval.
 
         Args:
-            run_results (Dict): The results of the optimization process.
-            filtered_results (Dict): The filtered results after analysis.
-
+            tc (str): The real turning point date in string format
+            fw (Framework): The Framework object containing the data with the date range
+        
         Returns:
-            float: The confidence of the turning points distribution.
+            float: The numeric value of the turning point date.
         """
-        return len([f["bestParams"][0] for f in filtered_results if f["is_significant"] is True]) / len(run_results["bestParams"][0])
-    
-    @staticmethod
-    def _compute_mean_error(self, tc_distrib: List[float], real_tc: float) -> float:
-        """
-        Compute the mean error of the predicted turning points.
-
-        Args:
-            tc_distrib (List[float]): A list of turning points.
-
-        Returns:
-            float: The mean error of the turning points distribution.
-        """
-        return np.mean([abs(tc - np.mean(tc_distrib)) for tc in tc_distrib])
+        tc_date = datetime.strptime(tc, "%d/%m/%Y")
+        for i, date in enumerate(fw.data[:, 1]):
+            if tc_date <= date:
+                return fw.data[i, 0]
+        raise ValueError(f"Turning point {tc} not found in the data range.")

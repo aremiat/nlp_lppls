@@ -1,23 +1,34 @@
 import numpy as np
 import pandas as pd
 import json
+import random
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-from tqdm import tqdm
 from datetime import datetime
 import plotly.io as pio
 import plotly.graph_objects as go
 import os
-
+from GQLib.plotter import Plotter
 from .Optimizers import MPGA, PSO, SGA, SA, Optimizer
 from GQLib.LombAnalysis import LombAnalysis
 from GQLib.Models import LPPL, LPPLS
 from .enums import InputType
-
+from typing import Optional, Union, List, Dict, Tuple
 import logging
 from GQLib.logging import with_spinner
+import matplotlib.dates as mdates
+from scipy.stats import gaussian_kde
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 
 logger = logging.getLogger(__name__)
+
+with open("params/debug_framework.json", "r") as file:
+    debug_params = json.load(file)
+
+DEBUG_STATUS_GRAPH_TC = debug_params["DEBUG_STATUS_GRAPH_TC"]
+DEBUG_STATUS_GRAPH_LOMB = debug_params["DEBUG_STATUS_GRAPH_LOMB"]
 
 class Framework:
     """
@@ -117,7 +128,6 @@ class Framework:
         data = np.insert(data.to_numpy(), 0, t, axis=1)
         return data
 
-    @with_spinner("Optimization with {optimizer.__class__.__name__} in progress ...")
     def process(self, time_start: str, time_end: str, optimizer: Optimizer) -> dict:
         """
         Optimize LPPL parameters over multiple subintervals of the selected sample.
@@ -147,24 +157,30 @@ class Framework:
         results = []
 
         # Optimize parameters for each subinterval
-        #for (sub_start, sub_end, sub_data) in tqdm(subintervals, desc="Processing subintervals", unit="subinterval"):
-        for sub_start, sub_end, sub_data in subintervals:
-            
-            bestObjV, bestParams = optimizer.fit(sub_start, sub_end, sub_data)
-            results.append({
-                "sub_start": sub_start,
-                "sub_end": sub_end,
-                "bestObjV": bestObjV,
-                "bestParams": bestParams.tolist()
-            })
+        with logging_redirect_tqdm():
+            for sub_start, sub_end, sub_data in tqdm(
+                subintervals,
+                desc=f"Processing subintervals for {optimizer.__class__.__name__}",
+                unit="subinterval",
+            ):
+                start = datetime.now()
+
+                bestObjV, bestParams = optimizer.fit(sub_start, sub_end, sub_data)
+                results.append({
+                    "sub_start": sub_start,
+                    "sub_end": sub_end,
+                    "bestObjV": bestObjV,
+                    "bestParams": bestParams.tolist(),
+                    "time": (datetime.now() - start).total_seconds()
+                })
         return results
 
     @with_spinner("Lomb-Scargle analysis in progress ...")
     def analyze(self,
-                results : dict = None,
+                results: dict = None,
                 result_json_name: str = None,
                 lppl_model: 'LPPL | LPPLS' = LPPL,
-                significativity_tc : float = 0.3,
+                significativity_tc: float = 0.3,
                 use_package: bool = False,
                 remove_mpf: bool = True,
                 mpf_threshold: float = 1e-3,
@@ -183,7 +199,7 @@ class Framework:
         significativity_tc : float
             Significance Threshold for Frequency Closeness. Default is 0.3
         use_package : bool
-            Whether to use the astropy package to compute the Lomb Periodogram Power 
+            Whether to use the astropy package to compute the Lomb Periodogram Power
         remove_mpf : bool, optional
             Whether to remove the "most probable frequency" from the results. Default is True.
         mpf_threshold : float, optional
@@ -222,26 +238,11 @@ class Framework:
             lomb.filter_results(remove_mpf=remove_mpf, mpf_threshold=mpf_threshold)
             is_significant = lomb.check_significance(significativity_tc=significativity_tc)
 
-            tc_index = res["bestParams"][0]
-            tc_idx = int(round(tc_index))
-            # borne inférieure et supérieure pour éviter l’IndexError
-            tc_idx = max(0, min(tc_idx, len(self.global_dates) - 1))
-            pred_date = pd.to_datetime(self.global_dates[tc_idx])
-
-            # Date de fin du sous-intervalle (en index puis en date)
-            end_idx = int(round(res["sub_end"]))
-            end_idx = max(0, min(end_idx, len(self.global_dates) - 1))
-            sub_end_date = pd.to_datetime(self.global_dates[end_idx])
-
-            # bornage à +2 ans après la fin du sous-intervalle
-            bound_date = sub_end_date + pd.DateOffset(years=4)
-
             if show:
-
                 ax_residuals = axes[idx, 0]
                 lomb.show_residuals(ax=ax_residuals)
                 ax_residuals.set_title(f'Subinterval {idx + 1} Residuals')
-            
+
                 ax_spectrum = axes[idx, 1]
                 lomb.show_spectrum(ax=ax_spectrum, use_filtered=True, show_threshold=True, highlight_freq=True)
                 ax_spectrum.set_title(f'Subinterval {idx + 1} Spectrum (Significant: {is_significant})')
@@ -250,27 +251,15 @@ class Framework:
                 self.show_lppl(lomb.lppl, ax=ax_lppl)
                 ax_lppl.set_title(f'Subinterval {idx + 1} LPPL')
 
-
             # Add of the results
-            # best_results.append({
-            #     "sub_start": res["sub_start"],
-            #     "sub_end": res["sub_end"],
-            #     "bestObjV": res["bestObjV"],
-            #     "bestParams": res["bestParams"],
-            #     "is_significant": is_significant,
-            #     "power_value": max(lomb.power)
-            # })
-
-            if is_significant and pred_date <= bound_date:
-                best_results.append({
-                    "sub_start": res["sub_start"],
-                    "sub_end": res["sub_end"],
-                    "bestObjV": res["bestObjV"],
-                    "bestParams": res["bestParams"],
-                    "is_significant": True,
-                    "power_value": max(lomb.power),
-                    "pred_date": pred_date.strftime("%Y-%m-%d")
-                })
+            best_results.append({
+                "sub_start": res["sub_start"],
+                "sub_end": res["sub_end"],
+                "bestObjV": res["bestObjV"],
+                "bestParams": res["bestParams"],
+                "is_significant": is_significant,
+                "power_value": max(lomb.power)
+            })
 
         if show:
             plt.tight_layout()
@@ -278,35 +267,6 @@ class Framework:
 
         return best_results
 
-    def compute_confusion_matrix(self,
-                                 best_results: list[dict],
-                                 real_tc: str,
-                                 window_days: int = 15,
-                                 date_format: str = "%d/%m/%Y") -> dict[str, int]:
-        """
-        Calcule TP, FP, FN, TN sur la base de best_results.
-        Un tc est un « positif » si is_significant == True.
-        Il est un « vrai » si sa date est à ± window_days de real_tc.
-        """
-        real_dt = pd.to_datetime(real_tc, format=date_format)
-        tp = fp = fn = tn = 0
-        n_dates = len(self.global_dates)
-
-        for res in best_results:
-            # conversion safe de l’indice en date
-            tc_idx = int(round(res["bestParams"][0]))
-            tc_idx = min(max(tc_idx, 0), n_dates - 1)
-            pred_dt = pd.to_datetime(self.global_dates[tc_idx])
-
-            is_positive = bool(res.get("is_significant", False))
-            is_true = abs((pred_dt - real_dt).days) <= window_days
-
-            if   is_positive and  is_true:  tp += 1
-            elif is_positive and not is_true: fp += 1
-            elif not is_positive and  is_true: fn += 1
-            else:                             tn += 1
-
-        return {"TP": tp, "FP": fp, "FN": fn, "TN": tn}
 
     def visualise_data(self,
                        start_date : str = None,
@@ -532,6 +492,12 @@ class Framework:
             save_plot (bool, optional): Whether to save the plot. Defaults to False.
         """
 
+        # Adapt multiple_result to old format :
+        temp = {}
+        for key, value in multiple_results.items():
+            temp[key] = value["raw_filtered_result"]
+        multiple_results = temp
+
         logging.debug("\n Visualize function input :")
         logging.debug(f"multiple_results : {multiple_results}")
         logging.debug(f"name : {name}")
@@ -542,6 +508,7 @@ class Framework:
         logging.debug(f"end_date : {end_date}")
         logging.debug(f"nb_tc : {nb_tc}")
         logging.debug(f"save_plot : {save_plot}\n")
+
         colors = [
             "#ffa15a",  # Orange clair
             "#ab63fa",  # Violet clair
@@ -729,30 +696,6 @@ class Framework:
             except Exception as e:
                 logging.error("Error saving figure: %s", e)
 
-    def compute_errors_in_days(self,
-                               best_results: list[dict],
-                               real_tc: str,
-                               date_format: str = "%d/%m/%Y") -> list[dict]:
-        """
-        Calcule pour chaque prédiction l'erreur absolue en jours
-        par rapport à la vraie date du tc. Ignore les tc hors bornes.
-        """
-        real_dt = pd.to_datetime(real_tc, format=date_format)
-        n = len(self.global_dates)
-
-        for res in best_results:
-            tc_index = res["bestParams"][0]
-            idx = int(round(tc_index))
-            # skip out-of-range forecasts
-            if idx < 0 or idx >= n:
-                res["error_days"] = np.nan
-                continue
-            pred_dt = pd.to_datetime(self.global_dates[idx])
-            res["error_days"] = abs((pred_dt - real_dt).days)
-
-        return best_results
-
-
     def show_lppl(self, lppl: 'LPPL | LPPLS', ax=None, show: bool = False) -> None:
         """
         Visualize the LPPL or LPPLS fit alongside observed data.
@@ -766,7 +709,6 @@ class Framework:
         show : bool, optional
             Whether to display the plot immediately. Default is False.
         """
-
         length_extended = (round(lppl.tc) + 1000) if self.frequency == "daily" else (round(lppl.tc) + 100) 
 
         # Calculate the maximum available length
@@ -796,8 +738,9 @@ class Framework:
 
         if show:
             plt.show()
-
-    @with_spinner("Generating subintervals in progress ...")
+        #     plotter = Plotter()
+        #     plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
+    
     @staticmethod
     def generate_subintervals(frequency :str, sample : np.asarray) -> list:
         """
@@ -911,3 +854,243 @@ class Framework:
             os.makedirs(directory_path)
 
         pio.write_image(fig, filename, scale=5, width=1000, height=800)
+
+    def _base(self, start_date: str, end_date: str, real_tc: str = None, title: str = None) -> tuple:
+        """
+        Trace le prix + t1, t2, real_tc et retourne fig, ax
+        avec zorder élevés par défaut.
+        """
+        # conversion des dates
+        start_training = pd.to_datetime(start_training, format="%d/%m/%Y")
+        end_training   = pd.to_datetime(end_date,      format="%d/%m/%Y")
+
+        # fenêtre
+        window_start = start_training - timedelta(days=90)
+        window_end   = end_training   + timedelta(days=730)
+
+        # extraction
+        mask   = [(window_start <= d <= window_end) for d in self.global_dates]
+        dates  = [d for d, m in zip(self.global_dates, mask) if m]
+        prices = [p for p, m in zip(self.global_prices, mask) if m]
+
+        # création figure/axe
+        fig, ax = plt.subplots(figsize=(18, 8))
+
+        # rendre la figure et l'axe transparents
+        fig.patch.set_alpha(0)     # fond de la figure
+        ax.patch.set_alpha(0)      # fond de l'axe
+
+        # prix
+        ax.plot(dates, prices,
+                color="black", linewidth=1.2,
+                label=f"{self.input_type.value} {self.frequency} price",
+                zorder=20)
+
+        # bornes t1/t2
+        ax.axvline(x=start_training, color="black",
+                linestyle="-.", linewidth=1, label="t1",
+                zorder=21)
+        ax.axvline(x=end_training,   color="black",
+                linestyle="-.", linewidth=1, label="t2",
+                zorder=21)
+        # fill between the all space between t1 and t2
+        ax.axvspan(start_training, end_training, facecolor="gray", alpha=0.15)
+
+        # real_tc
+        if real_tc is not None:
+            if isinstance(real_tc, str):
+                real_tc = pd.to_datetime(real_tc, format="%d/%m/%Y")
+            elif isinstance(real_tc, int):
+                real_tc = self.global_dates[real_tc]
+            ax.axvline(x=real_tc, color="red",
+                    linewidth=2, label="Real critical time",
+                    zorder=22)
+
+        if title is not None:
+            ax.set_title(title)
+        else:
+            ax.set_title("Log-Price & LPPLS fits")
+            
+        ax.set_xlabel("Date")
+        ax.set_ylabel(f"{self.input_type.value} {self.frequency} price")
+        leg = ax.legend(loc="upper left", title="Algorithmes / bornes")
+        leg.get_frame().set_alpha(0.9)
+        # Puis on remonte la légende
+        leg.set_zorder(25)
+
+        plt.tight_layout()
+        return fig, ax
+
+    def _add_kernels(self, fig, ax, dict_results):
+        """
+        Add kernels to the plot.
+
+        Parameters
+        ----------
+        fig : Figure
+            The figure object.
+        ax : Axes
+            The axes object.
+        dict_results : dict
+            Dictionary containing the results for each kernel.
+        """
+        colors = [
+            "#ffa15a",  # Orange clair
+            "#ab63fa",  # Violet clair
+            "#00cc96",  # Vert clair
+            "#ef553b",  # Rouge clair
+            "#636efa",  # Bleu clair
+            "#19d3f3",  # Cyan
+            "#ff6692",  # Rose clair
+            "#b6e880",  # Vert lime
+            "#ff97ff",  # Magenta clair
+        ]
+
+        # Crée un second axe pour tracer les densités
+        ax2 = ax.twinx()
+        ax2.set_ylabel("Densité de tc", fontsize=12)
+
+        for idx, (opt, values) in enumerate(dict_results.items()):
+            print(values)
+            # 1) récupère la distribution brute
+            distrib_all = values["tc_distrib"]
+            # 2) convertit chaque "index" flottant en date
+            rounded = [int(round(i)) for i in distrib_all]
+            kernel_dates = [self.global_dates[i] for i in rounded]
+
+            # 3) passe les dates en nombres matplotlib (float)
+            numeric_dates = mdates.date2num(kernel_dates)
+
+            # 4) estime la densité de noyau
+            kde = gaussian_kde(numeric_dates)
+            x_eval = np.linspace(numeric_dates.min(), numeric_dates.max(), 200)
+            y_eval = kde(x_eval)
+
+            # 5) trace la densité
+            ax2.plot(
+                x_eval,
+                y_eval,
+                color=colors[idx % len(colors)],
+                linewidth=1.5,
+                label=opt
+            )
+
+        # légende et alignement des limites en x
+        ax2.legend(title="Algorithmes", loc="upper right", fontsize=10)
+        ax2.set_xlim(ax.get_xlim())
+
+        # formate automatiquement les dates pour les deux axes
+        fig.autofmt_xdate()
+
+    def _add_half_violins(self, fig, ax, dict_results,
+                        width_scale: float = 0.5,
+                        spacing: float = 0.5,
+                        specific: str = "tc_distrib",
+                        hatch_pattern="/",
+                        color: str = "white",
+                        text: bool = False):
+
+        # 1) créer l'axe secondaire
+        ax_v = ax.twinx()
+        # 2) le placer SOUS l'axe principal
+        ax_v.set_zorder(0)        # twin axis lowest
+        ax.set_zorder(1)          # main axis above
+        # 3) rendre son fond transparent
+        ax_v.patch.set_alpha(0)
+        ax_v.set_yticks([])
+        ax_v.set_ylabel("")
+
+        # 4) préparer la grille de dates (inchangé)
+        all_num = []
+        for vals in dict_results.values():
+            raw = vals[specific]
+            idxs = [int(round(i)) for i in raw]
+            dates = [self.global_dates[i] for i in idxs]
+            all_num.append(mdates.date2num(dates))
+
+        mn, mx = min(arr.min() for arr in all_num), max(arr.max() for arr in all_num)
+        date_grid = np.linspace(mn, mx, 200)
+
+        max_y = -np.inf
+
+        # 5) tracer les demi-violons en zorder bas
+        for idx, (opt, vals) in enumerate(dict_results.items()):
+            raw = vals[specific]
+            idxs = [int(round(i)) for i in raw]
+            dates = [self.global_dates[i] for i in idxs]
+            num = mdates.date2num(dates)
+
+            kde = gaussian_kde(num)
+            dens = kde(date_grid)
+            dens = dens / dens.max() * width_scale
+            y0 = idx * spacing
+            hatch = hatch_pattern
+            # ligne de base
+            ax_v.hlines(y=y0, xmin=mn, xmax=mx,
+                        colors="black", linewidth=0.5)
+            # demi-violon blanc + hachures
+            poly = ax_v.fill_between(
+                date_grid, y0, y0 + dens,
+                facecolor=color, edgecolor="black",
+                linewidth=0.8, alpha=0.90,
+            )
+            poly.set_hatch(hatch)
+            # contour supérieur
+            ax_v.plot(date_grid, y0 + dens,
+                    color="black", linewidth=1.0)
+            
+            # label
+            if text:
+                ax_v.text(mx + (mx - mn)*0.01, y0 + dens.max()*0.5,
+                        opt.replace("_", "\n"), va="center", ha="left")
+
+            max_y = max(max_y, y0 + dens.max())
+
+        # 6) ajuster l'axe Y et formater X
+        ax_v.set_ylim(-spacing*0.5, max_y + spacing*0.5)
+        ax_v.xaxis_date()
+        fig.autofmt_xdate()
+
+        # légende (facultative, ici on utilise plutôt les labels texte)
+        ax.legend(loc="upper left", title="Algorithmes")
+
+    def _add_lppl_fit(self, fig, ax, dict_results: dict, nb_calib: int = 3, window_extension: int = 1000):
+        """
+        Ajoute les courbes de fit LPPL/LPPLS au graphique de base.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            La figure sur laquelle on travaille.
+        ax : matplotlib.axes.Axes
+            L'axe principal (celui des prix) pour y superposer les fits.
+        lppl_models : list of LPPL or LPPLS
+            Liste d'instances de modèles LPPL(S) déjà calibrés.
+        """
+        calib_set = dict_results["Set 1"]["NELDER_MEAD"]["raw_run_result"]
+        indices = random.sample(range(len(calib_set)), nb_calib)
+        calib_set_selected = [calib_set[i] for i in indices]
+
+        for i in range(nb_calib):
+            info = calib_set_selected[i]
+            mask   = [(info["sub_start"] <= t <= info["sub_end"]) for t in self.global_times]
+            prices = [p for p, m in zip(self.global_prices, mask) if m]
+            
+            lppl = LPPLS(params=info["bestParams"], 
+                         t= np.linspace(info["sub_start"], info["sub_end"], len(prices)),
+                         y=np.array(prices))
+            
+            mask   = [(info["sub_start"] <= t <= info["sub_end"] + window_extension) for t in self.global_times]
+            dates = [p for p, m in zip(self.global_dates, mask) if m]
+            lppl.t = np.array([p for p, m in zip(self.global_times, mask) if m])
+
+            ax.plot(
+                dates,
+                lppl.predict(),
+                linestyle="--",
+                linewidth=2,
+                label=f"{lppl.__name__} (tc={self.global_dates[int(lppl.tc)].strftime('%d-%m-%Y')})",
+            )
+
+        ax.legend(title="LPPL Fits", loc="upper left", fontsize=10)
+        fig.autofmt_xdate()
