@@ -1,0 +1,5 @@
+,mean_error,mean_error,mean_error,mean_error,mean_error,mean_error,mean_error,median_error,median_error,median_error,median_error,median_error,median_error,median_error,max_error,max_error,max_error,max_error,max_error,max_error,max_error
+,FA,MPGA,NELDER_MEAD,PSO,SA,SGA,TABU,FA,MPGA,NELDER_MEAD,PSO,SA,SGA,TABU,FA,MPGA,NELDER_MEAD,PSO,SA,SGA,TABU
+frequency,,,,,,,,,,,,,,,,,,,,,
+daily,316.84,52.09,53.00,48.55,53.62,215.36,46.09,235.50,53.00,51.00,51.50,55.00,105.00,50.00,1120.00,146.00,220.00,91.00,120.00,1205.00,92.00
+weekly,506.60,58.00,60.61,54.50,44.50,392.94,55.33,386.00,55.00,58.50,55.00,44.50,146.00,55.00,1093.00,104.00,146.00,71.00,83.00,1240.00,78.00

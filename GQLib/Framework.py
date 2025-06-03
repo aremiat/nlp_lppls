@@ -138,10 +138,10 @@ class Framework:
         # Configure the params of the optimizer based on the frequency
         optimizer.configure_params_from_frequency(self.frequency, optimizer.__class__.__name__)
         # Select data sample
-        sample = self.select_sample(self.data, time_start, time_end) 
+        sample = self.select_sample(self.data, time_start, time_end)
 
         # Generate subintervals
-        subintervals = self.generate_subintervals(self.frequency, sample)
+        subintervals = Framework.generate_subintervals(self.frequency, sample)
 
         # Store optimization results
         results = []
@@ -222,6 +222,20 @@ class Framework:
             lomb.filter_results(remove_mpf=remove_mpf, mpf_threshold=mpf_threshold)
             is_significant = lomb.check_significance(significativity_tc=significativity_tc)
 
+            tc_index = res["bestParams"][0]
+            tc_idx = int(round(tc_index))
+            # borne inférieure et supérieure pour éviter l’IndexError
+            tc_idx = max(0, min(tc_idx, len(self.global_dates) - 1))
+            pred_date = pd.to_datetime(self.global_dates[tc_idx])
+
+            # Date de fin du sous-intervalle (en index puis en date)
+            end_idx = int(round(res["sub_end"]))
+            end_idx = max(0, min(end_idx, len(self.global_dates) - 1))
+            sub_end_date = pd.to_datetime(self.global_dates[end_idx])
+
+            # bornage à +2 ans après la fin du sous-intervalle
+            bound_date = sub_end_date + pd.DateOffset(years=4)
+
             if show:
 
                 ax_residuals = axes[idx, 0]
@@ -238,20 +252,61 @@ class Framework:
 
 
             # Add of the results
-            best_results.append({
-                "sub_start": res["sub_start"],
-                "sub_end": res["sub_end"],
-                "bestObjV": res["bestObjV"],
-                "bestParams": res["bestParams"],
-                "is_significant": is_significant,
-                "power_value": max(lomb.power)
-            })
+            # best_results.append({
+            #     "sub_start": res["sub_start"],
+            #     "sub_end": res["sub_end"],
+            #     "bestObjV": res["bestObjV"],
+            #     "bestParams": res["bestParams"],
+            #     "is_significant": is_significant,
+            #     "power_value": max(lomb.power)
+            # })
+
+            if is_significant and pred_date <= bound_date:
+                best_results.append({
+                    "sub_start": res["sub_start"],
+                    "sub_end": res["sub_end"],
+                    "bestObjV": res["bestObjV"],
+                    "bestParams": res["bestParams"],
+                    "is_significant": True,
+                    "power_value": max(lomb.power),
+                    "pred_date": pred_date.strftime("%Y-%m-%d")
+                })
 
         if show:
             plt.tight_layout()
             plt.show()
 
         return best_results
+
+    def compute_confusion_matrix(self,
+                                 best_results: list[dict],
+                                 real_tc: str,
+                                 window_days: int = 15,
+                                 date_format: str = "%d/%m/%Y") -> dict[str, int]:
+        """
+        Calcule TP, FP, FN, TN sur la base de best_results.
+        Un tc est un « positif » si is_significant == True.
+        Il est un « vrai » si sa date est à ± window_days de real_tc.
+        """
+        real_dt = pd.to_datetime(real_tc, format=date_format)
+        tp = fp = fn = tn = 0
+        n_dates = len(self.global_dates)
+
+        for res in best_results:
+            # conversion safe de l’indice en date
+            tc_idx = int(round(res["bestParams"][0]))
+            tc_idx = min(max(tc_idx, 0), n_dates - 1)
+            pred_dt = pd.to_datetime(self.global_dates[tc_idx])
+
+            is_positive = bool(res.get("is_significant", False))
+            is_true = abs((pred_dt - real_dt).days) <= window_days
+
+            if   is_positive and  is_true:  tp += 1
+            elif is_positive and not is_true: fp += 1
+            elif not is_positive and  is_true: fn += 1
+            else:                             tn += 1
+
+        return {"TP": tp, "FP": fp, "FN": fn, "TN": tn}
 
     def visualise_data(self,
                        start_date : str = None,
@@ -673,6 +728,29 @@ class Framework:
                 logging.info("Figure saved at %s", filename)
             except Exception as e:
                 logging.error("Error saving figure: %s", e)
+
+    def compute_errors_in_days(self,
+                               best_results: list[dict],
+                               real_tc: str,
+                               date_format: str = "%d/%m/%Y") -> list[dict]:
+        """
+        Calcule pour chaque prédiction l'erreur absolue en jours
+        par rapport à la vraie date du tc. Ignore les tc hors bornes.
+        """
+        real_dt = pd.to_datetime(real_tc, format=date_format)
+        n = len(self.global_dates)
+
+        for res in best_results:
+            tc_index = res["bestParams"][0]
+            idx = int(round(tc_index))
+            # skip out-of-range forecasts
+            if idx < 0 or idx >= n:
+                res["error_days"] = np.nan
+                continue
+            pred_dt = pd.to_datetime(self.global_dates[idx])
+            res["error_days"] = abs((pred_dt - real_dt).days)
+
+        return best_results
 
 
     def show_lppl(self, lppl: 'LPPL | LPPLS', ax=None, show: bool = False) -> None:

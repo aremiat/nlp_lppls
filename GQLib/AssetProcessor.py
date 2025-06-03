@@ -7,6 +7,7 @@ from .enums import InputType
 from typing import List, Dict, Tuple
 import logging
 import numpy as np
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -245,10 +246,102 @@ class AssetProcessor:
         run_results = fw.process(start_date, end_date, optimizer)
         filtered_results = fw.analyze(results=run_results, lppl_model=optimizer.lppl_model)
 
-        tc_info = self._get_tc_distrib(filtered_results, real_tc)
-        tc_info["Confidence"] = self._compute_confidence(run_results, filtered_results)
+
 
         return tc_info
+
+    def compute_global_error(self,
+                                       optimizers: list[Optimizer],
+                                       frequencies: list[str] = ["daily"],
+                                       significativity_tc: float = 0.3,
+                                       save: bool = False,
+                                       rerun: bool = False
+                                       ) -> dict[str, dict[str, dict[str, float]]]:
+
+        summary: dict[str, dict[str, dict[str, float]]] = {}
+
+        for freq in frequencies:
+            print(f"Running FREQUENCY : {freq}")
+            fw = Framework(frequency=freq, input_type=self.input_type)
+            summary[freq] = {}
+
+            for optimizer in optimizers:
+                print(f"Running process for Optimizer : {optimizer.__class__.__name__}")
+                all_errs = []
+                times = []
+
+                # 1) Initialisation des compteurs de confusion
+                tp_list, fp_list, fn_list, tn_list = [], [], [], []
+
+                for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
+                    sd = datetime.strptime(start_date, "%d/%m/%Y")
+                    ed = datetime.strptime(end_date, "%d/%m/%Y")
+                    filename = (
+                        f"Results/results_{self.input_type.value}/"
+                        f"{optimizer.__class__.__name__}/{freq}/"
+                        f"{optimizer.lppl_model.__name__}_"
+                        f"{sd.strftime('%m-%Y')}_{ed.strftime('%m-%Y')}.json"
+                    )
+
+                    # 2) mesurer le temps d'analyse + calcul d'erreur
+                    if rerun:
+                        t0 = time.time()
+                        results = fw.process(start_date, end_date, optimizer)
+                        best_results = fw.analyze(
+                            results=results,
+                            significativity_tc=significativity_tc,
+                            lppl_model=optimizer.lppl_model
+                        )
+                        if save:
+                            fw.save_results(results, filename)
+                    else:
+                        best_results = fw.analyze(
+                            result_json_name=filename,
+                            significativity_tc=significativity_tc,
+                            lppl_model=optimizer.lppl_model
+                        )
+
+                    errs = fw.compute_errors_in_days(
+                        best_results,
+                        real_tc=self.real_tcs[idx]
+                    )
+                    times.append(time.time() - t0)
+                    all_errs.extend(r["error_days"] for r in errs)
+
+                    # 3) calcul de la confusion pour ce set
+                    cm = fw.compute_confusion_matrix(
+                        best_results,
+                        real_tc=self.real_tcs[idx],
+                        window_days=15
+                    )
+                    tp_list.append(cm["TP"])
+                    fp_list.append(cm["FP"])
+
+                # 4) agrégation des erreurs
+                arr = np.array(all_errs, dtype=float)
+                valid = arr[~np.isnan(arr)]
+
+                # 5) construction du stats dict
+                stats = {
+                    "mean_error": float(np.mean(valid)) if valid.size else np.nan,
+                    "median_error": float(np.median(valid)) if valid.size else np.nan,
+                    "std_error": float(np.std(valid)) if valid.size else np.nan,
+                    "max_error": float(np.max(valid)) if valid.size else np.nan,
+                    "q25_error": float(np.percentile(valid, 25)) if valid.size else np.nan,
+                    "q50_error": float(np.percentile(valid, 50)) if valid.size else np.nan,
+                    "q75_error": float(np.percentile(valid, 75)) if valid.size else np.nan,
+
+                    # temps moyen de calcul
+                    "mean_time": float(np.mean(times)) if times else np.nan,
+
+                    # confusion (moyennes sur tous les sets)
+                    "TP": float(np.mean(tp_list)) if tp_list else np.nan,
+                    "FP": float(np.mean(fp_list)) if fp_list else np.nan,
+                }
+
+                summary[freq][optimizer.__class__.__name__] = stats
+
+        return summary
     
     @staticmethod
     def _get_tc_distrib(self, run_results: List[Dict], real_tc: float) -> Dict:
