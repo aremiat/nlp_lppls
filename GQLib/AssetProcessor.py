@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import json
 from .Optimizers import MPGA, PSO, SGA, SA
+from .subintervals import ClassicSubIntervals, DidierSubIntervals, SubIntervalMethod
 from .Framework import Framework
 from GQLib.Optimizers import Optimizer
 from .enums import InputType
@@ -31,7 +32,7 @@ class AssetProcessor:
     This class processes financial asset data, applies optimization algorithms on LPPL Models,
     and visualizes the results based on various configurations.
     """
-    def __init__(self, input_type : InputType = InputType.WTI, rerun : bool = False):
+    def __init__(self, input_type : InputType = InputType.WTI):
         """
         Initializes the AssetProcessor with a specified input type (e.g., WTI).
         
@@ -44,6 +45,7 @@ class AssetProcessor:
         self.dates_sets = config["sets"]
         self.dates_graphs = config["graphs"]
         self.real_tcs = config["real_tcs"]
+
 
     def load_config(self):
         """
@@ -71,7 +73,9 @@ class AssetProcessor:
                            nb_tc : int = 20,
                            rerun: bool = False,
                            save: bool = False,
-                           save_plot : bool = False) -> None:
+                           subinterval_method = None,
+                           save_plot : bool = False,
+                           plot: bool = False) -> None:
         """
         Compare the performance of different optimizers on the same data set over multiple date ranges.
 
@@ -84,8 +88,11 @@ class AssetProcessor:
         lomb_params["significativity_threshold"] = significativity_tc
         lomb_params["nb_tc"] = nb_tc
 
+        if subinterval_method is None:
+            subinterval_method = ClassicSubIntervals
 
-        fw = Framework(frequency = frequency, input_type=self.input_type)
+
+        fw = Framework(frequency = frequency, input_type=self.input_type, subinterval_method=subinterval_method)
         
         results = {}
         for idx, (set_name, (start_date, end_date)) in enumerate(self.dates_sets.items()):
@@ -97,23 +104,13 @@ class AssetProcessor:
             for optimizer in optimizers:
                     model_associated.append(optimizer.lppl_model.__name__)
                     logging.info(f"\nRunning process for {optimizer.__class__.__name__}")
-                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer, self.real_tcs[idx], rerun, save)
+                    optim_results[optimizer.__class__.__name__] = self.run_optimizer(fw, start_date, end_date, optimizer,
+                                                                                     self.real_tcs[idx], rerun, save, plot)
 
             results[set_name] = optim_results
 
             print(results)
 
-            if DEBUG_STATUS_GRAPH_COMPARE_RECTANGLE:
-                real_tc = self.real_tcs[idx] if len(self.real_tcs) > idx else None
-                fw.visualize_compare_results(multiple_results=optim_results, 
-                                            name=f"Predicted critical times {frequency} {self.input_type.value} from {start_date} to {end_date}",
-                                            data_name=f"{self.input_type.value} Data", 
-                                            real_tc=real_tc, 
-                                            optimiseurs_models=model_associated,
-                                            start_date=start_date,
-                                            end_date=end_date,
-                                            nb_tc=nb_tc,
-                                            save_plot=save_plot)
 
         class ResultEncoder(json.JSONEncoder):
             def default(self, obj):
@@ -131,16 +128,29 @@ class AssetProcessor:
             json.dump(results, file, indent=4, cls=ResultEncoder)
         logging.info(f"Results saved to Venise_Results/{self.input_type.value}_metrics.json")
 
-    def run_optimizer(self, fw: Framework, start_date: datetime, end_date: datetime, optimizer: Optimizer, real_tc: float, rerun: bool = False, save: bool = False) -> Dict:
+    def run_optimizer(
+        self,
+        fw: Framework,
+        start_date: str,
+        end_date: str,
+        optimizer: Optimizer,
+        real_tc: float,
+        rerun: bool = False,
+        save: bool = False,
+        plot: bool = False
+    ) -> Dict:
         """
         Run the optimizer on the data, filter the resulting turning points, analyse and save the results.
 
         Args:
-            fw (Framework): The insttanciated Framework object with the data.
-            start_date (datetime): The start date for the optimization.
-            end_date (datetime): The end date for the optimization.
+            fw (Framework): The instantiated Framework object with the data.
+            start_date (str): The start date for the optimization (format "dd/mm/YYYY").
+            end_date (str): The end date for the optimization (format "dd/mm/YYYY").
             optimizer (Optimizer): The optimizer to use for the analysis.
-            real_tc (str): The real turning point to compare with.
+            real_tc (float): The real turning point to compare with.
+            rerun (bool, optional): If True, rerun the optimizer even if results exist on disk.
+            save (bool, optional): If True, save the raw run_results to a JSON file.
+            plot (bool, optional): If True, call Plotter.visualize_compare_results on the filtered results.
 
         Returns:
             Dict: A dictionary containing the information about the turning points distribution.
@@ -148,7 +158,14 @@ class AssetProcessor:
         real_tc_numeric = self._translate_tc_to_numeric(real_tc, fw)
         start_date_obj = datetime.strptime(start_date, "%d/%m/%Y")
         end_date_obj = datetime.strptime(end_date, "%d/%m/%Y")
-        filename = f"Results/results_{self.input_type.value}/{optimizer.__class__.__name__}/daily/{optimizer.lppl_model.__name__}_{start_date_obj.strftime('%m-%Y')}_{end_date_obj.strftime('%m-%Y')}.json"
+
+        filename = (
+            f"Results/results_{self.input_type.value}/"
+            f"{optimizer.__class__.__name__}/daily/"
+            f"{optimizer.lppl_model.__name__}_"
+            f"{start_date_obj.strftime('%m-%Y')}_"
+            f"{end_date_obj.strftime('%m-%Y')}.json"
+        )
 
         if rerun:
             run_results = fw.process(start_date, end_date, optimizer)
@@ -160,11 +177,36 @@ class AssetProcessor:
                 run_results = json.load(f)
             filtered_results = fw.analyze(result_json_name=filename, lppl_model=optimizer.lppl_model)
 
-        if DEBUG_STATUS_GRAPH_TC:
-            forward_end_date = datetime.strftime(datetime.strptime(end_date, "%d/%m/%Y") + timedelta(days=300), "%d/%m/%Y")
-            fw.visualize_tc(filtered_results, "Test", "WTI", start_date, forward_end_date, real_tc=real_tc)
+        # Si on doit tracer, on transforme la liste `filtered_results`
+        # en un dict avec pour clé le nom de l'optimizer
+        if plot:
+            forward_end_date = datetime.strftime(
+                datetime.strptime(end_date, "%d/%m/%Y") + timedelta(days=300),
+                "%d/%m/%Y"
+            )
 
-        return self._compute_tc_metrics(run_results, filtered_results, real_tc_numeric, fw.data[-1, 0])
+            multiple_results_dict = {
+                optimizer.__class__.__name__: {
+                    "raw_filtered_result": filtered_results
+                }
+            }
+
+            fw.plotter(
+                "visualize_compare_results",
+                multiple_results=multiple_results_dict,
+                name=f"{optimizer.__class__.__name__} Results",
+                data_name="WTI",
+                start_date=start_date,
+                end_date=forward_end_date,
+                real_tc=real_tc
+            )
+
+        return self._compute_tc_metrics(
+            run_results,
+            filtered_results,
+            real_tc_numeric,
+            fw.data[-1, 0]
+        )
     
     @with_spinner("Computing metrics...")
     def _compute_tc_metrics(self, run_results: List[Dict], filtered_results: List[Dict], real_tc: float, end_date: float) -> Dict:

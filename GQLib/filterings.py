@@ -38,13 +38,6 @@ class LPPLSConfidence(AbstractFilter):
         "damping": [0.0, np.inf],
     }
 
-    CONDITIONS_EARLY_BUBBLE = {
-        "alpha": [0.01, 1.2],
-        "omega": [2, 25],
-        "t_c": [-0.05, 0.1],
-        "nb_oscillations": [2.5, np.inf],
-        "damping": [0.0, np.inf],
-    }
 
     CONDITIONS_BUBBLE_END = {
         "alpha": [0.01, 1.2],

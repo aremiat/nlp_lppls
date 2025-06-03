@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 import pandas as pd
 import numpy as np
 from .Optimizers import Optimizer
-from .subintervals import MiaouIntervals, DidouIntervals, SubIntervalMethod
+from .subintervals import ClassicSubIntervals, DidierSubIntervals, SubIntervalMethod
 from .filterings import AbstractFilter
 from typing import List, Tuple, Union
 from enum import Enum
