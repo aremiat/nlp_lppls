@@ -17,6 +17,7 @@ torch.manual_seed(0)
 # 1. Réseau RNN + helper résolvant les paramètres *linéaires* LPPLS à la volée
 # ---------------------------------------------------------------------------
 
+
 class RNNLPPLSNet(nn.Module):
     """Réseau RNN (LSTM) qui prédit les paramètres non-linéaires (t_c, m, ω)."""
     def __init__(self, hidden_size: int = 16, num_layers: int = 1):
@@ -36,12 +37,14 @@ class RNNLPPLSNet(nn.Module):
         raw = self.fc(last)
         return raw.squeeze(0)  # Renvoie un vecteur de taille 3
 
+
 class RNNTrainer(BaseTrainer):
     """Trainer for RNN-based LPPLS models."""
     pass
 # ---------------------------------------------------------------------------
 # 2. RNN hérité d'AbstractNNOptimizer
 # ---------------------------------------------------------------------------
+
 
 class RNN(Optimizer):
     """Optimiseur basé sur RNN pour LPPL/LPPLS."""
