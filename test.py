@@ -1,21 +1,18 @@
-from GQLib.Optimizers.MLNN import MLNN
-from GQLib.Optimizers.RNN import RNN
-from GQLib.Optimizers.CNN import CNN
+from GQLib.Optimizers.Neural_Network.MLNN import MLNN
+from GQLib.Optimizers.Neural_Network.RNN import RNN
+from GQLib.Optimizers.Neural_Network.CNN import CNN
 from GQLib.Models import LPPLS
 from GQLib.enums import InputType
 from GQLib.AssetProcessor import AssetProcessor
-from GQLib.subintervals import ClassicSubIntervals, DidierSubIntervals
-from torch import nn
-import torch
-
+from GQLib.subintervals import ClassicSubIntervals
 
 # Classic Version
 wti = AssetProcessor(input_type = InputType.WTI)
 
 wti.compare_optimizers(frequency="daily",
-                       optimizers=[CNN(LPPLS), RNN(LPPLS), MLNN(LPPLS)],
+                       optimizers=[RNN(LPPLS)],
                        significativity_tc=0.3,
-                       rerun=False,
+                       rerun=True,
                        nb_tc=10,
                        subinterval_method=ClassicSubIntervals,
                        save=False,

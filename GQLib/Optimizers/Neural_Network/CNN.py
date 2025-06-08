@@ -6,9 +6,9 @@ import torch
 from torch import nn
 
 # Import de l'interface optimiseur abstrait
-from .abstract_optimizer import Optimizer
+from GQLib.Optimizers.abstract_optimizer import Optimizer
 from GQLib.Models import LPPLS
-from .base_trainer import BaseTrainer
+from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
 
 
 torch.manual_seed(0)

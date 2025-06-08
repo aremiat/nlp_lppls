@@ -6,9 +6,9 @@ import torch
 from torch import nn
 
 # Import the new abstract optimizer interface
-from .abstract_optimizer import Optimizer
+from GQLib.Optimizers.abstract_optimizer import Optimizer
 from GQLib.Models import LPPLS, LPPL
-from .base_trainer import BaseTrainer
+from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
 
 # ---------------------------------------------------------------------------
 # 1. Core network + helper that solves the *linear* LPPLS parameters on the fly
