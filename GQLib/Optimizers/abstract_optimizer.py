@@ -253,9 +253,33 @@ class GeneticAlgorithm(Optimizer):
 
 
 
+class AbstractNNOptimizer(Optimizer):
+    """
+    Abstract base class for neural network-based optimizers.
 
+    Defines the interface for any optimizer that uses a neural network to fit LPPL parameters.
+    """
 
-    
+    @abstractmethod
+    def fit(self, sub_start: float, sub_end: float, sub_data: np.ndarray) -> Tuple[float, np.ndarray]:
+        """
+        Fit the model parameters to a given subinterval of the data.
+
+        Parameters
+        ----------
+        sub_start : float
+            The start time of the subinterval.
+        sub_end : float
+            The end time of the subinterval.
+        sub_data : np.ndarray
+            A 2D array with time in the first column and observed values in the second.
+
+        Returns
+        -------
+        Tuple[float, np.ndarray]
+            The best fitness value (loss) and the corresponding parameter set.
+        """
+        pass
 
     
 

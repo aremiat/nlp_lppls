@@ -316,6 +316,7 @@ class Framework:
             frequency=self.frequency,
             input_type=self.input_type,
             save_image_func=self.save_image,
+            real_tc=kwargs.get("real_tc", None),
         )
 
         if not hasattr(plotter, plot_func_name):

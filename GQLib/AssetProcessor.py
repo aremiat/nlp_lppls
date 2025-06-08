@@ -1,14 +1,12 @@
 from datetime import datetime, timedelta
 import json
-from .Optimizers import MPGA, PSO, SGA, SA
 from .subintervals import ClassicSubIntervals, DidierSubIntervals, SubIntervalMethod
 from .Framework import Framework
 from GQLib.Optimizers import Optimizer
 from .enums import InputType
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import logging
 import numpy as np
-import time
 from GQLib.logging import with_spinner
 
 logger = logging.getLogger(__name__)
@@ -66,7 +64,6 @@ class AssetProcessor:
     # ---------------------------------------------
     # |                 NEW VERSION               |
     # ---------------------------------------------
-
     def compare_optimizers(self, optimizers: list[Optimizer], 
                            frequency : str = "daily",
                            significativity_tc=0.3,
@@ -74,7 +71,6 @@ class AssetProcessor:
                            rerun: bool = False,
                            save: bool = False,
                            subinterval_method = None,
-                           save_plot : bool = False,
                            plot: bool = False) -> None:
         """
         Compare the performance of different optimizers on the same data set over multiple date ranges.
@@ -108,9 +104,6 @@ class AssetProcessor:
                                                                                      self.real_tcs[idx], rerun, save, plot)
 
             results[set_name] = optim_results
-
-            print(results)
-
 
         class ResultEncoder(json.JSONEncoder):
             def default(self, obj):

@@ -24,6 +24,12 @@ class enculefilter(AbstractFilter):
     
 class LPPLSConfidence(AbstractFilter):
 
+    BOUNDED_PARAMS = {
+        "alpha": [0.1, 1.0],
+        "omega": [6, 13],
+        "t_c": [1.01, 1.4],
+    }
+
     SEARCH_SPACE = {
         "alpha": [0, 2.0],
         "omega": [1, 50],

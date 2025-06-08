@@ -22,12 +22,14 @@ class Plotter:
         frequency: str,
         input_type,
         save_image_func,
+        real_tc: Optional[str] = None,
     ):
         self.global_dates = global_dates
         self.global_prices = global_prices
         self.frequency = frequency
         self.input_type = input_type
         self.save_image = save_image_func
+        self.real_tc = real_tc
 
     @with_spinner("Creation of visualization in progress ...")
     def visualize_compare_results(self, multiple_results: dict[str, dict],
@@ -115,9 +117,9 @@ class Plotter:
         logging.debug("Base price series plotted")
 
         # Si la vraie date du tc est fournie, on la plot
-        if real_tc is not None:
+        if self.real_tc is not None:
             try:
-                target_date = pd.to_datetime(real_tc, format="%d/%m/%Y")
+                target_date = pd.to_datetime(self.real_tc, format="%d/%m/%Y")
                 logging.debug("Parsed real critical time: %s", target_date)
             except Exception as e:
                 logging.error("Error parsing real_tc: %s", e)
