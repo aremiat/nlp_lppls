@@ -1,6 +1,7 @@
 from GQLib.Optimizers.Neural_Network.MLNN import MLNN
 from GQLib.Optimizers.Neural_Network.RNN import RNN
 from GQLib.Optimizers.Neural_Network.CNN import CNN
+from GQLib.Optimizers.Neural_Network.NLCNN import NLCNN
 from GQLib.Models import LPPLS
 from GQLib.enums import InputType
 from GQLib.AssetProcessor import AssetProcessor
@@ -10,7 +11,7 @@ from GQLib.subintervals import ClassicSubIntervals
 wti = AssetProcessor(input_type = InputType.WTI)
 
 wti.compare_optimizers(frequency="daily",
-                       optimizers=[RNN(LPPLS)],
+                       optimizers=[NLCNN(LPPLS)],
                        significativity_tc=0.3,
                        rerun=True,
                        nb_tc=10,

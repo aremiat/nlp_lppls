@@ -42,7 +42,7 @@ class RNNTrainer(BaseTrainer):
     """Trainer for RNN-based LPPLS models."""
     pass
 # ---------------------------------------------------------------------------
-# 2. RNN hérité d'AbstractNNOptimizer
+# 2. RNN hérité d'Optimizer
 # ---------------------------------------------------------------------------
 
 
