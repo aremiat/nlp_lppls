@@ -116,10 +116,11 @@ class AssetProcessor:
                 elif isinstance(obj, np.ndarray):
                     return obj.tolist()
                 return super().default(obj)
+
     
-        with open(f"Venise_Results/{self.input_type.value}_metrics.json", "w") as file:
+        with open(f"nlp_results/{self.input_type.value}_metrics.json", "w") as file:
             json.dump(results, file, indent=4, cls=ResultEncoder)
-        logging.info(f"Results saved to Venise_Results/{self.input_type.value}_metrics.json")
+        logging.info(f"Results saved to nlp_results/{self.input_type.value}_metrics.json")
 
     def run_optimizer(
         self,

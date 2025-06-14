@@ -1,24 +1,18 @@
 import numpy as np
 import pandas as pd
 import json
-import random
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
 from datetime import datetime
 import plotly.io as pio
-import plotly.graph_objects as go
 import os
-from GQLib.plotter import Plotter
-from .Optimizers import MPGA, PSO, SGA, SA, Optimizer
-from .subintervals import ClassicSubIntervals, DidierSubIntervals, SubIntervalMethod
+from GQLib.Plotters.plotter import Plotter
+from .Optimizers import Optimizer
+from .subintervals import ClassicSubIntervals
 from GQLib.LombAnalysis import LombAnalysis
 from GQLib.Models import LPPL, LPPLS
 from .enums import InputType
-from typing import Optional, Union, List, Dict, Tuple
 import logging
 from GQLib.logging import with_spinner
-import matplotlib.dates as mdates
-from scipy.stats import gaussian_kde
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -269,8 +263,6 @@ class Framework:
 
         return best_results
 
-
-
     @staticmethod
     def select_sample(data : np.asarray, time_start: str, time_end: str) -> np.ndarray:
         """
@@ -368,242 +360,3 @@ class Framework:
 
         pio.write_image(fig, filename, scale=5, width=1000, height=800)
 
-    def _base(self, start_date: str, end_date: str, real_tc: str = None, title: str = None) -> tuple:
-        """
-        Trace le prix + t1, t2, real_tc et retourne fig, ax
-        avec zorder élevés par défaut.
-        """
-        # conversion des dates
-        start_training = pd.to_datetime(start_training, format="%d/%m/%Y")
-        end_training   = pd.to_datetime(end_date,      format="%d/%m/%Y")
-
-        # fenêtre
-        window_start = start_training - timedelta(days=90)
-        window_end   = end_training   + timedelta(days=730)
-
-        # extraction
-        mask   = [(window_start <= d <= window_end) for d in self.global_dates]
-        dates  = [d for d, m in zip(self.global_dates, mask) if m]
-        prices = [p for p, m in zip(self.global_prices, mask) if m]
-
-        # création figure/axe
-        fig, ax = plt.subplots(figsize=(18, 8))
-
-        # rendre la figure et l'axe transparents
-        fig.patch.set_alpha(0)     # fond de la figure
-        ax.patch.set_alpha(0)      # fond de l'axe
-
-        # prix
-        ax.plot(dates, prices,
-                color="black", linewidth=1.2,
-                label=f"{self.input_type.value} {self.frequency} price",
-                zorder=20)
-
-        # bornes t1/t2
-        ax.axvline(x=start_training, color="black",
-                linestyle="-.", linewidth=1, label="t1",
-                zorder=21)
-        ax.axvline(x=end_training,   color="black",
-                linestyle="-.", linewidth=1, label="t2",
-                zorder=21)
-        # fill between the all space between t1 and t2
-        ax.axvspan(start_training, end_training, facecolor="gray", alpha=0.15)
-
-        # real_tc
-        if real_tc is not None:
-            if isinstance(real_tc, str):
-                real_tc = pd.to_datetime(real_tc, format="%d/%m/%Y")
-            elif isinstance(real_tc, int):
-                real_tc = self.global_dates[real_tc]
-            ax.axvline(x=real_tc, color="red",
-                    linewidth=2, label="Real critical time",
-                    zorder=22)
-
-        if title is not None:
-            ax.set_title(title)
-        else:
-            ax.set_title("Log-Price & LPPLS fits")
-            
-        ax.set_xlabel("Date")
-        ax.set_ylabel(f"{self.input_type.value} {self.frequency} price")
-        leg = ax.legend(loc="upper left", title="Algorithmes / bornes")
-        leg.get_frame().set_alpha(0.9)
-        # Puis on remonte la légende
-        leg.set_zorder(25)
-
-        plt.tight_layout()
-        return fig, ax
-
-    def _add_kernels(self, fig, ax, dict_results):
-        """
-        Add kernels to the plot.
-
-        Parameters
-        ----------
-        fig : Figure
-            The figure object.
-        ax : Axes
-            The axes object.
-        dict_results : dict
-            Dictionary containing the results for each kernel.
-        """
-        colors = [
-            "#ffa15a",  # Orange clair
-            "#ab63fa",  # Violet clair
-            "#00cc96",  # Vert clair
-            "#ef553b",  # Rouge clair
-            "#636efa",  # Bleu clair
-            "#19d3f3",  # Cyan
-            "#ff6692",  # Rose clair
-            "#b6e880",  # Vert lime
-            "#ff97ff",  # Magenta clair
-        ]
-
-        # Crée un second axe pour tracer les densités
-        ax2 = ax.twinx()
-        ax2.set_ylabel("Densité de tc", fontsize=12)
-
-        for idx, (opt, values) in enumerate(dict_results.items()):
-            print(values)
-            # 1) récupère la distribution brute
-            distrib_all = values["tc_distrib"]
-            # 2) convertit chaque "index" flottant en date
-            rounded = [int(round(i)) for i in distrib_all]
-            kernel_dates = [self.global_dates[i] for i in rounded]
-
-            # 3) passe les dates en nombres matplotlib (float)
-            numeric_dates = mdates.date2num(kernel_dates)
-
-            # 4) estime la densité de noyau
-            kde = gaussian_kde(numeric_dates)
-            x_eval = np.linspace(numeric_dates.min(), numeric_dates.max(), 200)
-            y_eval = kde(x_eval)
-
-            # 5) trace la densité
-            ax2.plot(
-                x_eval,
-                y_eval,
-                color=colors[idx % len(colors)],
-                linewidth=1.5,
-                label=opt
-            )
-
-        # légende et alignement des limites en x
-        ax2.legend(title="Algorithmes", loc="upper right", fontsize=10)
-        ax2.set_xlim(ax.get_xlim())
-
-        # formate automatiquement les dates pour les deux axes
-        fig.autofmt_xdate()
-
-    def _add_half_violins(self, fig, ax, dict_results,
-                        width_scale: float = 0.5,
-                        spacing: float = 0.5,
-                        specific: str = "tc_distrib",
-                        hatch_pattern="/",
-                        color: str = "white",
-                        text: bool = False):
-
-        # 1) créer l'axe secondaire
-        ax_v = ax.twinx()
-        # 2) le placer SOUS l'axe principal
-        ax_v.set_zorder(0)        # twin axis lowest
-        ax.set_zorder(1)          # main axis above
-        # 3) rendre son fond transparent
-        ax_v.patch.set_alpha(0)
-        ax_v.set_yticks([])
-        ax_v.set_ylabel("")
-
-        # 4) préparer la grille de dates (inchangé)
-        all_num = []
-        for vals in dict_results.values():
-            raw = vals[specific]
-            idxs = [int(round(i)) for i in raw]
-            dates = [self.global_dates[i] for i in idxs]
-            all_num.append(mdates.date2num(dates))
-
-        mn, mx = min(arr.min() for arr in all_num), max(arr.max() for arr in all_num)
-        date_grid = np.linspace(mn, mx, 200)
-
-        max_y = -np.inf
-
-        # 5) tracer les demi-violons en zorder bas
-        for idx, (opt, vals) in enumerate(dict_results.items()):
-            raw = vals[specific]
-            idxs = [int(round(i)) for i in raw]
-            dates = [self.global_dates[i] for i in idxs]
-            num = mdates.date2num(dates)
-
-            kde = gaussian_kde(num)
-            dens = kde(date_grid)
-            dens = dens / dens.max() * width_scale
-            y0 = idx * spacing
-            hatch = hatch_pattern
-            # ligne de base
-            ax_v.hlines(y=y0, xmin=mn, xmax=mx,
-                        colors="black", linewidth=0.5)
-            # demi-violon blanc + hachures
-            poly = ax_v.fill_between(
-                date_grid, y0, y0 + dens,
-                facecolor=color, edgecolor="black",
-                linewidth=0.8, alpha=0.90,
-            )
-            poly.set_hatch(hatch)
-            # contour supérieur
-            ax_v.plot(date_grid, y0 + dens,
-                    color="black", linewidth=1.0)
-            
-            # label
-            if text:
-                ax_v.text(mx + (mx - mn)*0.01, y0 + dens.max()*0.5,
-                        opt.replace("_", "\n"), va="center", ha="left")
-
-            max_y = max(max_y, y0 + dens.max())
-
-        # 6) ajuster l'axe Y et formater X
-        ax_v.set_ylim(-spacing*0.5, max_y + spacing*0.5)
-        ax_v.xaxis_date()
-        fig.autofmt_xdate()
-
-        # légende (facultative, ici on utilise plutôt les labels texte)
-        ax.legend(loc="upper left", title="Algorithmes")
-
-    def _add_lppl_fit(self, fig, ax, dict_results: dict, nb_calib: int = 3, window_extension: int = 1000):
-        """
-        Ajoute les courbes de fit LPPL/LPPLS au graphique de base.
-
-        Parameters
-        ----------
-        fig : matplotlib.figure.Figure
-            La figure sur laquelle on travaille.
-        ax : matplotlib.axes.Axes
-            L'axe principal (celui des prix) pour y superposer les fits.
-        lppl_models : list of LPPL or LPPLS
-            Liste d'instances de modèles LPPL(S) déjà calibrés.
-        """
-        calib_set = dict_results["Set 1"]["NELDER_MEAD"]["raw_run_result"]
-        indices = random.sample(range(len(calib_set)), nb_calib)
-        calib_set_selected = [calib_set[i] for i in indices]
-
-        for i in range(nb_calib):
-            info = calib_set_selected[i]
-            mask   = [(info["sub_start"] <= t <= info["sub_end"]) for t in self.global_times]
-            prices = [p for p, m in zip(self.global_prices, mask) if m]
-            
-            lppl = LPPLS(params=info["bestParams"], 
-                         t= np.linspace(info["sub_start"], info["sub_end"], len(prices)),
-                         y=np.array(prices))
-            
-            mask   = [(info["sub_start"] <= t <= info["sub_end"] + window_extension) for t in self.global_times]
-            dates = [p for p, m in zip(self.global_dates, mask) if m]
-            lppl.t = np.array([p for p, m in zip(self.global_times, mask) if m])
-
-            ax.plot(
-                dates,
-                lppl.predict(),
-                linestyle="--",
-                linewidth=2,
-                label=f"{lppl.__name__} (tc={self.global_dates[int(lppl.tc)].strftime('%d-%m-%Y')})",
-            )
-
-        ax.legend(title="LPPL Fits", loc="upper left", fontsize=10)
-        fig.autofmt_xdate()

@@ -7,6 +7,7 @@ from GQLib.filterings import LPPLSConfidence
 
 conditions = LPPLSConfidence.BOUNDED_PARAMS
 
+
 class BaseTrainer:
     """Base class for training neural networks on LPPLS data with early stopping."""
     def __init__(self,
@@ -17,9 +18,9 @@ class BaseTrainer:
                  lr: float = 1e-2,
                  device: str = "cpu",
                  val_ratio: float = 0.2,
-                 patience: int = 10,
+                 patience: int = 100,
                  silent: bool = False):
-        # Normalize time and price
+        # Normalize time and price for training stability [0,1] range
         self.t0, self.t_max = t[0], t[-1]
         t_norm = (t - self.t0) / (self.t_max - self.t0)
         self.x_min, self.x_max = x.min(), x.max()
@@ -28,6 +29,7 @@ class BaseTrainer:
         self.t = torch.tensor(t_norm, dtype=torch.float32, device=device)
         self.x = torch.tensor(x_scaled, dtype=torch.float32, device=device)
 
+        # Initialize network and optimizer
         self.net = net
         self.opt = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.epochs = epochs
@@ -35,7 +37,7 @@ class BaseTrainer:
         self.val_ratio = val_ratio
         self.patience = patience
 
-        # Train/validation split (contiguous)
+        # Train/validation split
         N = len(self.t)
         val_size = int(N * self.val_ratio)
         self.train_idx = slice(0, N - val_size)

@@ -27,7 +27,7 @@ class LPPLSConfidence(AbstractFilter):
     BOUNDED_PARAMS = {
         "alpha": [0.1, 1.0],
         "omega": [6, 13],
-        "t_c": [1.01, 5],
+        "t_c": [1.01, 1.8],
     }
 
     SEARCH_SPACE = {

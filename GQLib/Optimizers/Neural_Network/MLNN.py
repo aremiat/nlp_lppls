@@ -10,10 +10,6 @@ from GQLib.Optimizers.abstract_optimizer import Optimizer
 from GQLib.Models import LPPLS, LPPL
 from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
 
-# ---------------------------------------------------------------------------
-# 1. Core network + helper that solves the *linear* LPPLS parameters on the fly
-# ---------------------------------------------------------------------------
-
 torch.manual_seed(0)
 
 
@@ -39,13 +35,13 @@ class MLNNTrainer(BaseTrainer):
 
 
 # ---------------------------------------------------------------------------
-# 2. MLNN subclassing AbstractNNOptimizer
+# 2. MLNN subclassing Optimizer
 # ---------------------------------------------------------------------------
 
 class MLNN(Optimizer):
     """Neural network optimizer for LPPL/LPPLS using a custom architecture."""
 
-    def __init__(self, lppl_model: 'LPPL | LPPLS' = LPPL, net: nn.Module = None,
+    def __init__(self, lppl_model: 'LPPL | LPPLS' = LPPLS, net: nn.Module = None,
                  epochs: int = 3000, lr: float = 1e-2, device: str = "cpu"):
         """
         Initialize the MLNN.
