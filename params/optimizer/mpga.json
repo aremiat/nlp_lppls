@@ -1,6 +1,0 @@
-{
-    "NUM_POPULATIONS": 15,
-    "POPULATION_SIZE": 150,
-    "MAX_GEN": 700,
-    "STOP_GEN": 80
-}

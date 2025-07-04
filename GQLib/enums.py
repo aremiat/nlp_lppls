@@ -1,6 +1,6 @@
 from enum import Enum
 from GQLib.Models import LPPL, LPPLS
-from GQLib.Optimizers import NELDER_MEAD, MPGA, PSO, SA, SGA, TABU, FA
+from GQLib.Optimizers import NELDER_MEAD
 
 class InputType(Enum):
     WTI = "WTI"
@@ -15,10 +15,4 @@ class Models(Enum):
     LPPLS = LPPLS
 
 class Optimizers(Enum):
-    MPGA = MPGA
-    PSO = PSO
-    SA = SA
-    SGA = SGA
     NELDER_MEAD = NELDER_MEAD
-    TABU = TABU
-    FA = FA

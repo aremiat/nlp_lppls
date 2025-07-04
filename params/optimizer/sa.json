@@ -1,5 +1,0 @@
-{
-    "MAX_ITER": 1000,
-    "INITIAL_TEMP": 1000,
-    "COOLING_RATE": 0.99
-}

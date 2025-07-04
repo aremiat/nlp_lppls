@@ -2,6 +2,9 @@ import torch
 from torch import nn
 
 
+####################### Attention-based Neural Networks #######################
+# Same as the original models, but with self-attention blocks added.
+
 class MLNNWithAttention(nn.Module):
     def __init__(self,
                  n_hidden: int    = 64,

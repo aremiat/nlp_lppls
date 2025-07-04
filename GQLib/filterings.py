@@ -17,11 +17,7 @@ class AbstractFilter(ABC):
         """
         pass
 
-class enculefilter(AbstractFilter):
 
-    def filter():
-        return True
-    
 class LPPLSConfidence(AbstractFilter):
 
     BOUNDED_PARAMS = {
@@ -58,18 +54,6 @@ class LPPLSConfidence(AbstractFilter):
         self.len_window = len_window
         self.kwargs = kwargs
 
-    def get_search_space(self) -> Dict[str, List[float]]:
-        bounds = self.SEARCH_SPACE.copy()
-        bounds["t_c"] = [self.len_window * b for b in bounds["t_c"]]
-        if self.model is LPPL:
-            bounds["phi"] = [0, 2 * np.pi]
-        return self.SEARCH_SPACE
-    
-    def compute_damping(self, alpha: float, B: float, omega: float, C) -> float:
-        """
-        Compute the damping factor based on the LPPLS parameters.
-        """
-        return (alpha * omega) / (2 * np.pi) * np.exp(-omega * t_c)
 
     def is_valid(self, linear_params: list, non_linear_params: list, dt: float) -> bool:
         """
