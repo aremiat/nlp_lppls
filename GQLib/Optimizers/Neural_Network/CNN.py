@@ -57,11 +57,13 @@ class CNN(Optimizer):
                  net: nn.Module | None = None,
                  epochs: int = 3000,
                  lr: float = 1e-2,
-                 device: str = "cpu"):
+                 device: str = "cpu",
+                 silent: bool = True):
         self.epochs, self.lr, self.device = epochs, lr, device
         self.name = "CNN-LPPLS"
         self.lppl_model = lppl_model
         self.net = net if net is not None else CNNLPPLSNet()
+        self.silent = silent
 
     def fit(self,
             sub_start: float,
@@ -74,7 +76,7 @@ class CNN(Optimizer):
             epochs=self.epochs,
             lr=self.lr,
             device=self.device,
-            silent=True
+            silent=self.silent
         )
         tc, m, w, loss = trainer.train(return_full=False)
         return loss, np.array([tc, m, w])

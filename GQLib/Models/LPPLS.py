@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from ..njitFunc import njit_RSS_LPPLS
 
+
 class LPPLS:
     """
     A class to represent the Log-Periodic Power Law Simple (LPPLS) model with 4 linear parameters.

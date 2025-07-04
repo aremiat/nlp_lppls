@@ -64,11 +64,13 @@ class NLCNN(Optimizer):
                  net: nn.Module | None = None,
                  epochs: int = 3000,
                  lr: float = 1e-2,
-                 device: str = "cpu"):
+                 device: str = "cpu",
+                 silent: bool = True):
         self.lppl_model, self.device = lppl_model, device
         self.net = net if net is not None else NLCNNLPPLSNet()
         self.epochs, self.lr = epochs, lr
         self.name = "NLCNN-LPPLS"
+        self.silent = silent
 
     def fit(self,
             sub_start: float,
@@ -77,7 +79,7 @@ class NLCNN(Optimizer):
         t, y = sub_data[:,0], sub_data[:,1]
         trainer = NLCNNTrainer(t,y, net=self.net,
                                epochs=self.epochs, lr=self.lr,
-                               device=self.device, silent=True)
+                               device=self.device, silent=self.silent)
         tc, m, w, loss = trainer.train(return_full=False)
         return loss, np.array([tc, m, w])
 

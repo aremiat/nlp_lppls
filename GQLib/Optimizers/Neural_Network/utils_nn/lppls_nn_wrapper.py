@@ -2,27 +2,28 @@ import torch
 from torch import nn
 from typing import Tuple
 
+
 class LPPLSNNWrapper:
     """
     A flexible wrapper for LPPLS parameter estimation using a customizable neural network.
     """
 
-    def __init__(self, net: nn.Module):
+    def __init__(self):
         """
         Initialize the wrapper with a neural network.
-
-        Parameters:
-            net (nn.Module): The neural network architecture to use.
         """
-        if net is None:
-            raise ValueError("A neural network instance must be provided.")
-        self.net = net
 
     @staticmethod
     def _lppls_linear_params(tc: torch.Tensor, m: torch.Tensor, w: torch.Tensor,
                              t: torch.Tensor, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Analytic least-squares for (A, B, C₁, C₂) given nonlinear params and series.
+
+        :param tc : Critical time (t_c) tensor.
+        :param m: Exponent (m) tensor.
+        :param w: Angular frequency (ω) tensor.
+        :param t: Time tensor.
+        :param x: Price tensor.
         """
         delta = tc - t
         mask = torch.isfinite(delta) & (delta > 0)
@@ -43,15 +44,3 @@ class LPPLSNNWrapper:
         A, B, C1, C2 = theta
         lppls_hat = (M @ theta.unsqueeze(1)).squeeze()
         return lppls_hat, torch.stack([A, B, C1, C2])
-
-    def forward(self, t: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the neural network.
-
-        Parameters:
-            t (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Raw output from the neural network.
-        """
-        return self.net(t)

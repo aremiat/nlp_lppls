@@ -12,16 +12,16 @@ from GQLib.subintervals import ClassicSubIntervals
 from GQLib.AssetProcessor import AssetProcessor
 
 # Classic Version
-# wti = AssetProcessor(input_type = InputType.WTI)
-#
-# wti.compare_optimizers(frequency="daily",
-#                        optimizers=[MLNN(LPPLS)],
-#                        significativity_tc=0.3,
-#                        rerun=True,
-#                        nb_tc=10,
-#                        subinterval_method=ClassicSubIntervals,
-#                        save=True,
-#                        plot=False)
+wti = AssetProcessor(input_type = InputType.WTI)
+
+wti.compare_optimizers(frequency="daily",
+                       optimizers=[MLNN(LPPLS, silent=True)],
+                       significativity_tc=0.3,
+                       rerun=True,
+                       nb_tc=10,
+                       subinterval_method=ClassicSubIntervals,
+                       save=False,
+                       plot=True)
 
 # PLotting the results
 

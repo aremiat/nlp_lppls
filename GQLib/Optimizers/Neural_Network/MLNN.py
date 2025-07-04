@@ -42,7 +42,7 @@ class MLNN(Optimizer):
     """Neural network optimizer for LPPL/LPPLS using a custom architecture."""
 
     def __init__(self, lppl_model: 'LPPL | LPPLS' = LPPLS, net: nn.Module = None,
-                 epochs: int = 3000, lr: float = 1e-2, device: str = "cpu"):
+                 epochs: int = 3000, lr: float = 0.001, device: str = "cpu", silent: bool = True):
         """
         Initialize the MLNN.
 
@@ -57,6 +57,7 @@ class MLNN(Optimizer):
         self.name = "MLNN"
         self.lppl_model = lppl_model
         self.net = net if net is not None else _MLNNNet()
+        self.silent = silent
 
     def fit(self, sub_start: float, sub_end: float, sub_data: np.ndarray):
         """
@@ -72,6 +73,6 @@ class MLNN(Optimizer):
         """
         t, y = sub_data[:, 0], sub_data[:, 1]
         trainer = MLNNTrainer(t, y, net=self.net, epochs=self.epochs,
-                              lr=self.lr, device=self.device, silent=True)
+                              lr=self.lr, device=self.device, silent=self.silent)
         tc, m, w, loss = trainer.train(return_full=False)
         return loss, np.array([tc, m, w])
