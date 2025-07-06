@@ -7,9 +7,11 @@ from GQLib.Models import LPPL, LPPLS
 from typing import Optional, Union, List, Dict, Tuple
 import logging
 import plotly.graph_objects as go
-from plotly import io as pio
 from datetime import datetime, timedelta
 from GQLib.logging import with_spinner
+
+import plotly.io as pio
+pio.renderers.default = 'browser'
 
 
 
@@ -555,3 +557,34 @@ class Plotter:
                     plt.show()
                 #     plotter = Plotter()
                 #     plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
+    @staticmethod
+    def plot_loss(losses: list[float], model_name = None) -> None:
+            """
+            Plot the loss function over epochs using Plotly.
+
+            Args:
+                losses (list[float]): List of loss values for each epoch.
+                save_plot (bool, optional): Whether to save the plot. Defaults to False.
+                filename (str, optional): File path to save the plot. Defaults to None.
+            """
+            epochs = list(range(1, len(losses) + 1))
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(
+                x=epochs,
+                y=losses,
+                mode='lines+markers',
+                name='Loss',
+                line=dict(color='blue', width=2),
+                marker=dict(size=6)
+            ))
+
+            fig.update_layout(
+                title="Loss Function Over Epochs" + (f" - {model_name}" if model_name else ""),
+                xaxis_title="Epochs",
+                yaxis_title="Loss",
+                template="plotly_white",
+                showlegend=True
+            )
+
+            fig.show()

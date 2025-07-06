@@ -125,6 +125,7 @@ class KernelPlotter:
                           text: bool = False):
         ax_v = ax.twinx(); ax_v.set_zorder(0); ax.set_zorder(1)
         ax_v.patch.set_alpha(0); ax_v.set_yticks([]); ax_v.set_ylabel("")
+        min_points = 5
         if not dict_results:
             logger.warning("No results provided for half-violins."); return
 
@@ -140,6 +141,12 @@ class KernelPlotter:
         for idx, (opt, vals) in enumerate(dict_results.items()):
             num = [mdates.date2num(self.global_dates[int(round(i))])
                    for i in vals[specific] if int(round(i)) < len(self.global_dates)]
+
+            if len(num) < min_points:
+                logger.warning(f"Not enough points for {opt} ({len(num)} < {min_points}). Skipping.")
+                continue
+
+
             kde  = gaussian_kde(num)
             dens = kde(date_grid); dens = dens / dens.max() * width_scale
             y0   = idx * spacing

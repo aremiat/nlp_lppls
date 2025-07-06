@@ -4,6 +4,7 @@ from torch import nn
 import numpy as np
 from GQLib.Optimizers.Neural_Network.utils_nn.lppls_nn_wrapper import LPPLSNNWrapper
 from GQLib.filterings import LPPLSConfidence
+from GQLib.Plotters.plotter import Plotter
 
 conditions = LPPLSConfidence.BOUNDED_PARAMS
 
@@ -18,7 +19,7 @@ class BaseTrainer:
                  lr: float = 1e-2,
                  device: str = "cpu",
                  val_ratio: float = 0.2,
-                 patience: int = 100,
+                 patience: int = 40,
                  silent: bool = False):
         # Normalize time and price for training stability [0,1] range
         self.t0, self.t_max = t[0], t[-1]
@@ -31,6 +32,7 @@ class BaseTrainer:
 
         # Initialize network and optimizer
         self.net = net
+        self.plotter = Plotter
         self.opt = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.epochs = epochs
         self.silent = silent
@@ -62,6 +64,7 @@ class BaseTrainer:
         best_state = None
         wait = 0
 
+        losses = []
         for epoch in range(1, self.epochs + 1):
             if not self.silent:
                 print(f"\rEpoch {epoch}/{self.epochs}", end="")
@@ -83,6 +86,7 @@ class BaseTrainer:
                     tc, m, w, t_train, x_train
                 )
                 train_loss = torch.mean((x_train - lppls_hat_train) ** 2)
+                losses.append(train_loss.item())
             train_loss.backward()
             self.opt.step()
 
@@ -132,6 +136,9 @@ class BaseTrainer:
             print(f"  t_c   ≈ {tc_real:.2f}")
             print(f"  m     ≈ {m_n:.4f}")
             print(f"  omega ≈ {w_n:.4f}\n")
+
+
+        # Plotter.plot_loss(losses=losses, model_name=self.net.__class__.__name__,)
 
         if return_full:
             return tc_real, m_n, w_n, (A, B, C1, C2), float(best_val_loss)

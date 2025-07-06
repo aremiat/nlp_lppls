@@ -1,0 +1,6 @@
+{
+    "channels": 16,
+    "kernel_size": 3,
+    "num_layers": 2,
+    "eps": 1e-6
+}
