@@ -8,19 +8,19 @@ from GQLib.Optimizers.Neural_Network.MLNN import MLNN
 from GQLib.Optimizers.Neural_Network.RNN import RNN
 from GQLib.Optimizers.Neural_Network.CNN import CNN
 from GQLib.Optimizers.Neural_Network.NLCNN import NLCNN
+from GQLib.Optimizers.Neural_Network.attention import NLCNNWithAttention, MLNNWithAttention, CNNWithAttention, RNNWithAttention
 from GQLib.Models.LPPLS import LPPLS
 from GQLib.subintervals import ClassicSubIntervals
 from GQLib.AssetProcessor import AssetProcessor
 
 # Classic Version
-wti = AssetProcessor(input_type = InputType.SP500)
+wti = AssetProcessor(input_type = InputType.WTI)
 #
 wti.compare_optimizers(frequency="daily",
                        optimizers=[NELDER_MEAD(LPPLS),
-                           MLNN(LPPLS, epochs=3000, silent=True),
-                                    RNN(LPPLS, epochs=3000, silent=True),
-                                    CNN(LPPLS, epochs=3000, silent=True),
-                                    NLCNN(LPPLS, epochs=3000, silent=True)],
+                           MLNN(LPPLS, net= MLNNWithAttention(),epochs=100, silent=True),
+                                    RNN(LPPLS, net=RNNWithAttention(), epochs=100, silent=True),
+                                    CNN(LPPLS, net=CNNWithAttention(), epochs=100, silent=True)],
                        significativity_tc=0.3,
                        rerun=True,
                        nb_tc=10,
@@ -28,15 +28,16 @@ wti.compare_optimizers(frequency="daily",
                        save=True,
                        plot=False)
 
+
 # PLotting the results
 
-fw = Framework("daily", InputType.SP500)
-
+fw = Framework("daily", InputType.WTI)
+#
 plotter = KernelPlotter.from_framework(fw)
 
 fig, axes = plotter._base("01/04/2003", "02/01/2008", "03/07/2008")
 #
-with open("nlp_results/BTC_metrics.json", "r") as f:
+with open("nlp_results/WTI_metrics.json", "r") as f:
     data = json.load(f)
 
 plotter._add_half_violins(fig, axes, data["Set 1"],
@@ -93,8 +94,8 @@ plotter._add_half_violins(fig, axes, data["Set 2"],
                         text=True,)
 
 plt.show(block=True)
-
-
+#
+#
 fig, axes = plotter._base("01/11/2011", "01/08/2015", "11/02/2016")
 
 #
@@ -124,29 +125,15 @@ plotter._add_half_violins(fig, axes, data["Set 3"],
                         text=True,)
 
 plt.show(block=True)
-
-# Custom Version
-
-# Define a custom neural network
-# class CustomNet(nn.Module):
-#     def __init__(self, n_hidden: int = 64):
-#         super().__init__()
-#         self.fc1 = nn.Linear(1, n_hidden)
-#         self.fc2 = nn.Linear(n_hidden, n_hidden)
-#         self.out = nn.Linear(n_hidden, 3)
-#         self.relu = nn.ReLU()
 #
-#     def forward(self, t: torch.Tensor) -> torch.Tensor:
-#         h = self.relu(self.fc1(t))
-#         h = self.relu(self.fc2(h))
-#         raw = self.out(h)
-#         return raw.mean(dim=0)
+# # Custom Version
 #
-#
-# # Instantiate the custom network
-# custom_net = CustomNet(n_hidden=64)
-#
-# # Use the custom network in MLNN
+# #
+# #
+# # # Instantiate the custom network
+# # custom_net = CustomNet(n_hidden=64)
+# #
+# # # Use the custom network in MLNN
 # wti.compare_optimizers(frequency="daily",
 #                        optimizers=[RNN(LPPLS, net=custom_net)],
 #                        significativity_tc=0.3,

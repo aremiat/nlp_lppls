@@ -118,7 +118,7 @@ class AssetProcessor:
                 return super().default(obj)
 
     
-        with open(f"nlp_results/{self.input_type.value}_metrics.json", "w") as file:
+        with open(f"nlp_results/{self.input_type.value}_metrics_attention.json", "w") as file:
             json.dump(results, file, indent=4, cls=ResultEncoder)
         logging.info(f"Results saved to nlp_results/{self.input_type.value}_metrics.json")
 
