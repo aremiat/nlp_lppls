@@ -18,9 +18,9 @@ wti = AssetProcessor(input_type = InputType.WTI)
 #
 wti.compare_optimizers(frequency="daily",
                        optimizers=[NELDER_MEAD(LPPLS),
-                           MLNN(LPPLS, net= MLNNWithAttention(),epochs=100, silent=True),
-                                    RNN(LPPLS, net=RNNWithAttention(), epochs=100, silent=True),
-                                    CNN(LPPLS, net=CNNWithAttention(), epochs=100, silent=True)],
+                           MLNN(LPPLS, epochs=100, silent=True),
+                                    RNN(LPPLS, epochs=100, silent=True),
+                                    CNN(LPPLS, epochs=100, silent=True)],
                        significativity_tc=0.3,
                        rerun=True,
                        nb_tc=10,
@@ -28,6 +28,33 @@ wti.compare_optimizers(frequency="daily",
                        save=True,
                        plot=False)
 
+wti = AssetProcessor(input_type = InputType.BTC)
+#
+wti.compare_optimizers(frequency="daily",
+                       optimizers=[NELDER_MEAD(LPPLS),
+                           MLNN(LPPLS, epochs=100, silent=True),
+                                    RNN(LPPLS, epochs=100, silent=True),
+                                    CNN(LPPLS, epochs=100, silent=True)],
+                       significativity_tc=0.3,
+                       rerun=True,
+                       nb_tc=10,
+                       subinterval_method=ClassicSubIntervals,
+                       save=True,
+                       plot=False)
+
+wti = AssetProcessor(input_type = InputType.SP500)
+#
+wti.compare_optimizers(frequency="daily",
+                       optimizers=[NELDER_MEAD(LPPLS),
+                           MLNN(LPPLS, epochs=100, silent=True),
+                                    RNN(LPPLS, epochs=100, silent=True),
+                                    CNN(LPPLS, epochs=100, silent=True)],
+                       significativity_tc=0.3,
+                       rerun=True,
+                       nb_tc=10,
+                       subinterval_method=ClassicSubIntervals,
+                       save=True,
+                       plot=False)
 
 # PLotting the results
 
