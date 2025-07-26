@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from torch import nn
 
-# Import de l'interface optimiseur abstrait
 from GQLib.Optimizers.abstract_optimizer import Optimizer
 from GQLib.Models import LPPLS
 from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
@@ -13,10 +12,7 @@ from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
 
 torch.manual_seed(0)
 
-# ---------------------------------------------------------------------------
-# 1. Réseau CNN (1D) + helper résolvant les paramètres *linéaires* LPPLS à la volée
-# ---------------------------------------------------------------------------
-
+# CNN
 
 class CNNLPPLSNet(nn.Module):
     """Réseau CNN1D qui prédit les paramètres non-linéaires (t_c, m, ω)."""
@@ -46,12 +42,12 @@ class CNNTrainer(BaseTrainer):
     pass  # Inherits all functionality from BaseTrainer
 
 # ---------------------------------------------------------------------------
-# 2. CNNOptimizer hérité d'Optimizer
+# 2. CNNOptimizer
 # ---------------------------------------------------------------------------
 
 
 class CNN(Optimizer):
-    """Optimiseur basé sur CNN pour LPPL/LPPLS."""
+    """Optimizer based on CNN for LPPL/LPPLS."""
     def __init__(self,
                  lppl_model: 'LPPL | LPPLS' = LPPLS,
                  net: nn.Module | None = None,

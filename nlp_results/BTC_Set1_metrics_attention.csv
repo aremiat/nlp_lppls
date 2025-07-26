@@ -1,0 +1,5 @@
+algorithm,tc_power_mean,confidence,error_mean,error_std
+NELDER_MEAD,1184.0,0.24,715.8,421.5
+MLNN,1189.3,0.1,480.6,247.4
+RNN,1142.9,0.34,137.3,306.8
+CNN,1200.7,0.24,398.7,273.6

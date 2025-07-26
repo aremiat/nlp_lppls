@@ -55,12 +55,11 @@ class LPPLSConfidence(AbstractFilter):
         self.kwargs = kwargs
 
 
-    def is_valid(self, linear_params: list, non_linear_params: list, dt: float) -> bool:
+    def is_valid(self, non_linear_params: list, dt: float) -> bool:
         """
         Validate the parameters based on LPPLS-specific criteria, including dynamic bounds for t_c.
 
         Parameters:
-            linear_params (list): List of linear parameters.
             non_linear_params (list): List of non-linear parameters.
             dt (float): Time step or length of the series.
 

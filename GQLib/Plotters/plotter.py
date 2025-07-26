@@ -1,10 +1,9 @@
-import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
 import numpy as np
 from GQLib.Models import LPPL, LPPLS
-from typing import Optional, Union, List, Dict, Tuple
+from typing import Optional, Union
 import logging
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -513,50 +512,6 @@ class Plotter:
                               paper_bgcolor='white')
             fig.show()
 
-            def show_lppl(self, lppl: 'LPPL | LPPLS', ax=None, show: bool = False) -> None:
-                """
-                Visualize the LPPL or LPPLS fit alongside observed data.
-
-                Parameters
-                ----------
-                lppl : LPPL or LPPLS
-                    An instance of the LPPL or LPPLS model with fitted parameters.
-                ax : matplotlib.axes.Axes, optional
-                    An axis to plot on. If None, creates a new figure.
-                show : bool, optional
-                    Whether to display the plot immediately. Default is False.
-                """
-                length_extended = (round(lppl.tc) + 1000) if self.frequency == "daily" else (round(lppl.tc) + 100)
-
-                # Calculate the maximum available length
-                max_length = len(self.global_prices)
-
-                # Adjust length_extended so it does not exceed the available length
-                length_extended = min(length_extended, max_length)
-
-                extended_t = np.arange(lppl.t[0], length_extended)
-                extended_y = self.global_prices[int(extended_t[0]):int(extended_t[-1] + 1)]
-                extended_dates = self.global_dates[int(extended_t[0]):int(extended_t[-1] + 1)]
-                end_date = self.global_dates[int(lppl.t[-1])]
-
-                lppl.t = extended_t
-                predicted = lppl.predict(True)
-
-                if ax is None:
-                    fig, ax = plt.subplots(figsize=(10, 6))
-
-                ax.plot(extended_dates, extended_y, label='Observed')
-                ax.plot(extended_dates, predicted, label='Predicted')
-                ax.axvline(x=end_date, color='r', linestyle='--', label='End of Subinterval')
-                ax.set_xlabel('Date')
-                ax.set_ylabel('Price')
-                ax.set_title('LPPL Model Prediction')
-                ax.legend()
-
-                if show:
-                    plt.show()
-                #     plotter = Plotter()
-                #     plotter.plot_lppl_fit(lppl, self.global_dates, self.global_prices)
     @staticmethod
     def plot_loss(losses: list[float], model_name = None) -> None:
             """

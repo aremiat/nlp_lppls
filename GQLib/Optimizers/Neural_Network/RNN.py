@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from torch import nn
 
-# Import de l'interface optimiseur abstrait
 from GQLib.Optimizers.abstract_optimizer import Optimizer
 from GQLib.Models import LPPLS
 from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
@@ -14,7 +13,7 @@ from GQLib.Optimizers.Neural_Network.base_trainer import BaseTrainer
 torch.manual_seed(0)
 
 # ---------------------------------------------------------------------------
-# 1. Réseau RNN + helper résolvant les paramètres *linéaires* LPPLS à la volée
+# 1. Réseau RNN
 # ---------------------------------------------------------------------------
 
 
@@ -42,7 +41,7 @@ class RNNTrainer(BaseTrainer):
     """Trainer for RNN-based LPPLS models."""
     pass
 # ---------------------------------------------------------------------------
-# 2. RNN hérité d'Optimizer
+# 2. RNN Optimizer
 # ---------------------------------------------------------------------------
 
 
