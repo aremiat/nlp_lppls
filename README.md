@@ -31,14 +31,14 @@ Time series are segmented into **overlapping sub‑intervals** via a sliding‑w
 
 ## Methods Overview
 
-- **Baselines:** Nelder–Mead simplex on LPPLS with linear–nonlinear separation. fileciteturn0file0  
+- **Baselines:** Nelder–Mead simplex on LPPLS with linear–nonlinear separation.
 - **Neural calibrators:**  
   - **MLNN:** two hidden layers (ReLU), predicting \((t_c,\alpha,\omega)\); trained with MSE on \(\log p(t)\) reconstruction. 
-  - **RNN (LSTM):** final hidden state → FC layer → \((t_c,\alpha,\omega)\). fileciteturn0file0  
-  - **CNN:** 1D conv trunk + adaptive avg‑pool → FC → \((t_c,\alpha,\omega)\). fileciteturn0file0  
+  - **RNN (LSTM):** final hidden state → FC layer → \((t_c,\alpha,\omega)\). 
+  - **CNN:** 1D conv trunk + adaptive avg‑pool → FC → \((t_c,\alpha,\omega)\).
   - **+ MHSA (optional):** single multi‑head self‑attention block inserted on top of the trunk, with residual & layer‑norm, then pooled to predict the parameters. 
 
-- **Training / early stopping:** validation loss typically plateaus ≈ **40 epochs**; early stopping with **patience = 40**. fileciteturn0file0
+- **Training / early stopping:** validation loss typically plateaus ≈ **40 epochs**; early stopping with **patience = 40**. 
 
 - **Parameter bounds (daily):** \(t_c \in [0, 4\ \text{years}]\), \(\omega \in [6, 13]\), \(\alpha \in [0.1, 1]\). 
 
